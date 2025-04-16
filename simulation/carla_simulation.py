@@ -1,0 +1,582 @@
+#!/usr/bin/env python
+"""Main simulation manager for CARLA testing"""
+
+import carla
+import time
+import numpy as np
+from datetime import datetime
+
+class CarlaSimulation:
+    """Main simulation manager class"""
+    
+    def __init__(self, config, file_manager, sensor_callbacks):
+        """
+        Initialize the CARLA simulation
+        
+        Args:
+            config: SimulationConfig object
+            file_manager: FileManager class
+            sensor_callbacks: SensorCallbacks class
+        """
+        self.config = config
+        self.file_manager = file_manager
+        self.sensor_callbacks = sensor_callbacks
+        
+        self.sim_dir = file_manager.create_simulation_directory()
+        self.lidar_data_list = []
+        self.collision_detected = False
+        self.stopped_time = 0.0
+        self.vehicle = None
+        self.pedestrian = None
+        self.lidar = None
+        self.collision_sensor = None
+        self.world = None
+        self.client = None
+        self.original_settings = None
+        self.sim_start_time = None
+        self.exit_requested = False
+        self.frame = 0
+        self.movement_started = False
+        
+    def setup_carla_connection(self):
+        """Connect to CARLA server and initialize world"""
+        self.client = carla.Client('localhost', 2000)
+        self.client.set_timeout(10.0)
+        self.world = self.client.get_world()
+        
+        # Save original settings to restore them later
+        self.original_settings = self.world.get_settings()
+        
+        # Configure synchronous mode settings
+        settings = self.world.get_settings()
+        traffic_manager = self.client.get_trafficmanager(8000)
+        traffic_manager.set_synchronous_mode(True)
+        
+        settings.fixed_delta_seconds = self.config.delta_seconds
+        settings.synchronous_mode = self.config.sync_mode
+        settings.no_rendering_mode = self.config.no_rendering
+        self.world.apply_settings(settings)
+        
+        print(f"Connected to CARLA server, synchronous mode: {self.config.sync_mode}")
+        return True
+    
+    def clear_existing_actors(self):
+        """Clear all existing actors from the simulation"""
+        actor_list = self.world.get_actors()
+        
+        # Group actors by type for systematic cleanup
+        vehicles = [actor for actor in actor_list if 'vehicle' in actor.type_id]
+        walkers = [actor for actor in actor_list if 'walker' in actor.type_id]
+        sensors = [actor for actor in actor_list if 'sensor' in actor.type_id]
+        controllers = [actor for actor in actor_list if 'controller' in actor.type_id]
+        
+        # First destroy controllers
+        for controller in controllers:
+            try:
+                controller.stop()
+                controller.destroy()
+            except Exception as e:
+                print(f"Error destroying controller: {e}")
+        
+        # Then destroy sensors
+        for sensor in sensors:
+            try:
+                sensor.destroy()
+            except Exception as e:
+                print(f"Error destroying sensor: {e}")
+        
+        # Then vehicles and walkers
+        for vehicle in vehicles:
+            try:
+                vehicle.destroy()
+            except Exception as e:
+                print(f"Error destroying vehicle: {e}")
+                
+        for walker in walkers:
+            try:
+                walker.destroy()
+            except Exception as e:
+                print(f"Error destroying walker: {e}")
+        
+        # Wait for cleanup to complete
+        time.sleep(1.0)
+        print("Cleared existing actors from simulation")
+        return True
+    
+    def setup_weather(self):
+        """Configure weather conditions for the simulation"""
+        if not self.config.weather_enabled:
+            print("Weather configuration disabled in settings")
+            return
+    
+        try:
+            # List all available maps
+            available_maps = self.client.get_available_maps()
+            print("Available maps:", available_maps)
+        
+            # Get current map info
+            current_map = self.world.get_map()
+            print(f"Current map name: {current_map.name}")
+        
+            # Find closest matching map in available maps
+            closest_match = None
+            for map_name in available_maps:
+                if current_map.name in map_name or map_name in current_map.name:
+                    closest_match = map_name
+                    break
+                
+            if closest_match:
+                print(f"Found matching map: {closest_match}")
+                self.world = self.client.load_world(
+                    closest_match,
+                    reset_settings=False,
+                    map_layers=carla.MapLayer.All
+                )
+            else:
+                print("No matching map found, applying weather without reload")
+            
+            # Apply weather
+            weather_preset = carla.WeatherParameters.HardRainNight
+            self.world.set_weather(weather_preset)
+        
+            for _ in range(5):
+                self.world.tick()
+            
+            print("Weather applied")
+            return True
+        
+        except Exception as e:
+            print(f"Error setting up weather: {e}")
+            return False
+    
+    def setup_vehicle(self):
+        """Set up the test vehicle"""
+        blueprint_library = self.world.get_blueprint_library()
+        
+        # Position the vehicle
+        vehicle_bp = blueprint_library.find(self.config.vehicle_type)
+        vehicle_spawn_point = carla.Transform(
+            carla.Location(
+                x=self.config.original_x - self.config.car_setback, 
+                y=self.config.original_y + self.config.car_right_offset, 
+                z=0.600000
+            ), 
+            carla.Rotation(yaw=0)
+        )
+        
+        # Set vehicle physics properties for more realistic impact simulation
+        physics_control = carla.VehiclePhysicsControl()
+        physics_control.mass = self.config.vehicle_mass
+        physics_control.max_rpm = self.config.vehicle_max_rpm
+        physics_control.moi = 1.0
+        physics_control.damping_rate_full_throttle = 0.25
+        physics_control.damping_rate_zero_throttle_clutch_engaged = 2.0
+        physics_control.damping_rate_zero_throttle_clutch_disengaged = 0.35
+        
+        try:
+            self.vehicle = self.world.spawn_actor(vehicle_bp, vehicle_spawn_point)
+            # Apply physics control to the vehicle after spawning
+            self.vehicle.apply_physics_control(physics_control)
+            print(f"Vehicle spawned: {self.config.vehicle_type}")
+            return True
+        except RuntimeError as e:
+            print(f"VEHICLE SPAWN ERROR: {str(e)}")
+            return False
+    
+    def setup_pedestrian(self):
+        """Set up the pedestrian in the scene"""
+        blueprint_library = self.world.get_blueprint_library()
+        
+        # Find a walker blueprint
+        try:
+            walker_bps = blueprint_library.filter('walker')
+            if walker_bps:
+                pedestrian_bp = walker_bps[0]
+                print(f"Using walker blueprint: {pedestrian_bp.id}")
+            else:
+                raise RuntimeError("No walker blueprints found in the blueprint library")
+        except Exception as e:
+            print(f"Error finding walker blueprint: {e}")
+            # Try a direct approach as last resort
+            pedestrian_bp = blueprint_library.find('walker.pedestrian.0001')
+            if not pedestrian_bp:
+                # Just get any blueprint with 'walker' in the name
+                available_bps = [bp.id for bp in blueprint_library if 'walker' in bp.id.lower()]
+                if available_bps:
+                    print(f"Available walker blueprints: {available_bps}")
+                    pedestrian_bp = blueprint_library.find(available_bps[0])
+                else:
+                    raise RuntimeError("No walker blueprints found")
+        
+        # Configure collision and physics properties
+        pedestrian_bp.set_attribute('is_invincible', 'false')
+        
+        # Calculate a position directly in the car's path
+        pedestrian_spawn_point = carla.Transform(
+            carla.Location(
+                x=self.config.original_x - self.config.car_setback + self.config.pedestrian_distance_adjusted, 
+                y=self.config.original_y + self.config.car_right_offset,  # Same Y as the car 
+                z=1.2  # Higher off the ground for better visibility
+            ),  
+            carla.Rotation(yaw=180)  # Facing toward the car
+        )
+        
+        # Print coordinates to help debug positioning
+        print(f"Vehicle spawn coordinates: x={self.config.original_x - self.config.car_setback}, y={self.config.original_y + self.config.car_right_offset}")
+        print(f"Pedestrian spawn coordinates: x={self.config.original_x - self.config.car_setback + self.config.pedestrian_distance_adjusted}, y={self.config.original_y + self.config.car_right_offset}")
+        print(f"Y-offset between vehicle and pedestrian: 0.0m (should be identical)")
+        
+        try:
+            self.pedestrian = self.world.spawn_actor(pedestrian_bp, pedestrian_spawn_point)
+            
+            # Ensure pedestrian has proper physics - critical for collision detection
+            self.pedestrian.set_simulate_physics(True)
+            
+            # Make pedestrian more visible in LiDAR by changing its color
+            if hasattr(self.pedestrian, 'set_color'):
+                self.pedestrian.set_color(carla.Color(r=255, g=0, b=0))  # Bright red
+                
+            # Set up proper collision detection for the pedestrian
+            if hasattr(self.pedestrian, 'set_enable_gravity'):
+                self.pedestrian.set_enable_gravity(True)
+            
+            # Give physics a moment to initialize properly
+            self.world.tick()
+            time.sleep(0.2)
+            
+            print("Static pedestrian placed in vehicle path with physics and collision enabled")
+            return True
+                
+        except RuntimeError as e:
+            # If we got here, the vehicle spawn succeeded but pedestrian spawn failed
+            if self.vehicle:
+                self.vehicle.destroy()
+            print(f"PEDESTRIAN SPAWN ERROR: {str(e)}")
+            return False
+            
+    def setup_lidar(self):
+        """Set up the LiDAR sensor on the vehicle"""
+        blueprint_library = self.world.get_blueprint_library()
+        
+        # Configure LiDAR settings with improved object detection for CARLA 10.0
+        lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
+        print(f"Setting up LiDAR with blueprint: {lidar_bp.id}")
+        
+        # Basic settings that should work in most CARLA versions
+        lidar_bp.set_attribute('channels', str(self.config.lidar_channels))
+        lidar_bp.set_attribute('points_per_second', str(self.config.lidar_points_per_second))
+        lidar_bp.set_attribute('rotation_frequency', str(self.config.lidar_frequency))
+        lidar_bp.set_attribute('range', str(self.config.lidar_range))
+        
+        # Set these if available in CARLA 10.0
+        try:
+            lidar_bp.set_attribute('upper_fov', str(self.config.lidar_upper_fov))
+            lidar_bp.set_attribute('lower_fov', str(self.config.lidar_lower_fov))
+            print("Set LiDAR vertical FOV parameters")
+        except Exception as e:
+            print(f"Could not set LiDAR FOV parameters: {e}")
+        
+        # Try to set additional parameters if available
+        try:
+            lidar_bp.set_attribute('sensor_tick', '0.0')  # Try to synchronize
+        except:
+            print("Could not set sensor_tick parameter")
+        
+        # Try to set noise parameters if available
+        for param in ['dropoff_general_rate', 'dropoff_intensity_limit', 'dropoff_zero_intensity', 'noise_stddev']:
+            try:
+                lidar_bp.set_attribute(param, '0.0')
+                print(f"Set LiDAR parameter {param} = 0.0")
+            except:
+                print(f"Parameter {param} not available in this CARLA version")
+
+        # Spawn LiDAR with proper transform - important for detection
+        lidar_transform = carla.Transform(
+            carla.Location(x=0.0, z=2.0),  # Move to top center of vehicle for better visibility
+            carla.Rotation(pitch=0, yaw=0, roll=0)  # Forward facing
+        )
+        
+        try:
+            self.lidar = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=self.vehicle)
+            print(f"LiDAR sensor attached to vehicle at position (x=0.0, z=2.0) facing forward")
+            
+            # Set up LiDAR callback for data collection with autonomous control
+            if self.config.enable_autonomous:
+                self.lidar.listen(lambda data: self.sensor_callbacks.lidar_callback(
+                    data, self.lidar_data_list, self.vehicle, self.sim_start_time, self.config.enable_autonomous))
+            else:
+                self.lidar.listen(lambda data: self.sensor_callbacks.lidar_callback(
+                    data, self.lidar_data_list, None, self.sim_start_time, False))
+            
+            return True
+        except Exception as e:
+            print(f"Error setting up LiDAR: {e}")
+            return False
+    
+    def setup_collision_sensor(self):
+        """Set up collision sensor on the vehicle"""
+        blueprint_library = self.world.get_blueprint_library()
+        
+        # Create collision sensor to detect when vehicle hits pedestrian
+        collision_bp = blueprint_library.find('sensor.other.collision')
+        
+        try:
+            self.collision_sensor = self.world.spawn_actor(collision_bp, carla.Transform(), attach_to=self.vehicle)
+            
+            # Create and register collision callback
+            collision_callback, collision_detected_ref = self.sensor_callbacks.create_collision_callback(
+                self.vehicle, self.pedestrian)
+            
+            # Set up the callback
+            self.collision_sensor.listen(collision_callback)
+            
+            # Store the collision detection reference
+            self.collision_detected = collision_detected_ref[0]
+            
+            print("Collision sensor attached to vehicle")
+            return True
+        except Exception as e:
+            print(f"Error setting up collision sensor: {e}")
+            return False
+    
+    def initialize_simulation(self):
+        """Initialize all components of the simulation"""
+        print("\nInitializing CARLA simulation...")
+        
+        # Setup CARLA connection
+        if not self.setup_carla_connection():
+            return False
+        
+        # Setup weather conditions
+        self.setup_weather()
+        
+        # Clear existing actors
+        self.clear_existing_actors()
+        
+        # Setup vehicle
+        if not self.setup_vehicle():
+            return False
+        
+        # Setup pedestrian
+        if not self.setup_pedestrian():
+            return False
+        
+        # Setup LiDAR
+        if not self.setup_lidar():
+            return False
+        
+        # Setup collision sensor
+        if not self.setup_collision_sensor():
+            return False
+        
+        # Record the simulation start time
+        self.sim_start_time = datetime.now()
+        
+        print(f"\nSimulation initialized with {'AUTONOMOUS MODE ENABLED' if self.config.enable_autonomous else 'autonomous mode disabled'}")
+        return True
+    
+    def visualize_detection(self, debug, recent_data, detection_results):
+        """Visualize LiDAR points and object detection in the simulation"""
+        car_pos = self.vehicle.get_location()
+        
+        # Visualize a smaller sample of LiDAR points to avoid performance issues
+        try:
+            # Only visualize every 10th point from the first 200 points to prevent renderer overload
+            for i in range(0, min(200, len(recent_data)), 10):
+                point = recent_data[i]
+                
+                # Convert from LiDAR-relative to world coordinates
+                point_loc = carla.Location(
+                    x=car_pos.x + point[0],
+                    y=car_pos.y + point[1],
+                    z=car_pos.z + point[2]
+                )
+                
+                # Draw a dot for each LiDAR point
+                debug.draw_point(
+                    point_loc,
+                    size=0.05,
+                    color=carla.Color(0, 255, 0, 255),  # Green dots for raw LiDAR
+                    life_time=0.1
+                )
+        except Exception as e:
+            print(f"Error drawing LiDAR points: {e}")
+        
+        # Check if object was detected
+        if detection_results.get('object_detected', False):
+            # Draw a line to the detected object
+            object_loc = detection_results['location']
+            
+            # Convert from LiDAR-relative to world coordinates
+            object_world_loc = carla.Location(
+                x=car_pos.x + object_loc[0],
+                y=car_pos.y + object_loc[1],
+                z=car_pos.z + object_loc[2]
+            )
+            
+            # Draw a more visible red line from car to detected object
+            debug.draw_line(
+                car_pos,
+                object_world_loc,
+                thickness=0.3,  # Thicker line
+                color=carla.Color(255, 0, 0, 255),
+                life_time=0.2
+            )
+    
+    def run_simulation(self):
+        """Run the main simulation loop"""
+        if not self.initialize_simulation():
+            print("Failed to initialize simulation. Exiting.")
+            return False
+            
+        # Set up vehicle control with reduced throttle for slower acceleration
+        vehicle_control = carla.VehicleControl()
+        vehicle_control.throttle = self.config.throttle_value
+        vehicle_control.steer = 0.0
+        vehicle_control.brake = 0.0
+        vehicle_control.hand_brake = False
+        vehicle_control.reverse = False
+        
+        # Apply initial control but don't start moving yet
+        # Ensure vehicle is stopped initially
+        stop_control = carla.VehicleControl()
+        stop_control.throttle = 0.0
+        stop_control.brake = 1.0  # Full brake
+        stop_control.hand_brake = True
+        self.vehicle.apply_control(stop_control)
+        
+        # Debug helper removed as visualization is not needed
+        
+        # Main simulation loop
+        start_time = datetime.now()
+        
+        try:
+            print("Starting simulation loop...")
+            while not self.exit_requested:
+                current_time = datetime.now()
+                elapsed_seconds = (current_time - start_time).total_seconds()
+                
+                # Start vehicle movement after 1 second (reduced waiting time)
+                if not self.movement_started and elapsed_seconds > 1.0:
+                    print("Starting vehicle movement...")
+                    # Make sure autopilot is off
+                    self.vehicle.set_autopilot(False)
+                    
+                    # Make sure the hand brake is released and any initial braking is released
+                    self.vehicle.apply_control(carla.VehicleControl(throttle=0.0, brake=0.0, hand_brake=False))
+                    self.world.tick()
+                    
+                    # Apply control with very aggressive throttle to overcome any residual braking
+                    control = carla.VehicleControl()
+                    control.throttle = 1.0  # Maximum throttle for guaranteed start
+                    control.brake = 0.0
+                    control.hand_brake = False
+                    self.vehicle.apply_control(control)
+                    
+                    # Wait a bit longer for physics to initiate with the new strong throttle
+                    time.sleep(0.2)
+                    
+                    # Wait a moment for physics to initiate
+                    for _ in range(5):  # Multiple ticks to ensure physics are applied
+                        self.world.tick()
+                        time.sleep(0.01)
+                    
+                    # Now apply regular control
+                    self.vehicle.apply_control(vehicle_control)
+                    self.movement_started = True
+                    print("Vehicle movement started - throttle:", vehicle_control.throttle)
+                
+                # Update the simulation
+                self.world.tick()
+                
+                # This small sleep helps prevent simulation issues
+                time.sleep(0.005)
+                
+                # Visualization code removed as it's not needed at this time
+                
+                # Display distance between vehicle and pedestrian
+                if self.frame % 20 == 0:  # Update stats every 20 frames
+                    # Get current positions
+                    car_pos = self.vehicle.get_location()
+                    ped_pos = self.pedestrian.get_location()
+                    
+                    # Calculate distance
+                    distance = np.sqrt((car_pos.x - ped_pos.x)**2 + (car_pos.y - ped_pos.y)**2)
+                    
+                    # Get vehicle speed
+                    vel = self.vehicle.get_velocity()
+                    speed_ms = np.sqrt(vel.x**2 + vel.y**2 + vel.z**2)
+                    speed_mph = speed_ms * 2.23694  # Convert to mph
+                    
+                    # Print stats
+                    print(f"Distance to pedestrian: {distance:.2f}m | Speed: {speed_mph:.2f} mph | Simulation time: {elapsed_seconds:.2f}s")
+                    
+                    # Monitor for simulation timeout or completion
+                    if elapsed_seconds > self.config.max_simulation_time:
+                        print(f"Simulation timeout reached ({self.config.max_simulation_time} seconds). Ending simulation.")
+                        self.exit_requested = True
+                    
+                    # Monitor for vehicle passing the pedestrian without collision
+                    if car_pos.x > ped_pos.x + 10 and not self.collision_detected:
+                        print("Vehicle has passed the pedestrian without collision. Simulation complete.")
+                        if self.config.enable_autonomous:
+                            print(f"Autonomous braking successfully avoided collision!")
+                        self.exit_requested = True
+                
+                # Increment frame counter
+                self.frame += 1
+                
+        except KeyboardInterrupt:
+            print("\nUser interrupted the simulation.")
+        except Exception as e:
+            print(f"Simulation error: {e}")
+        finally:
+            # Cleanup and save data
+            self.cleanup()
+            
+        return True
+    
+    def cleanup(self):
+        """Clean up simulation resources and save data"""
+        print("Cleaning up and saving data...")
+        
+        # Save the collected LiDAR data
+        self.file_manager.save_lidar_data(
+            self.sim_dir, 
+            self.lidar_data_list, 
+            self.collision_detected, 
+            self.config.enable_autonomous, 
+            self.frame,
+            self.stopped_time
+        )
+        
+        # Print summary of outcome
+        if self.collision_detected:
+            print("\nSIMULATION OUTCOME: Collision occurred with pedestrian")
+        else:
+            if self.stopped_time >= 1.0:
+                print("\nSIMULATION OUTCOME: Vehicle successfully stopped before pedestrian")
+                print(f"Autonomous braking system prevented collision")
+            else:
+                print("\nSIMULATION OUTCOME: No collision detected with pedestrian")
+                
+        print(f"Total frames: {self.frame}")
+        print(f"Total LiDAR scans: {len(self.lidar_data_list)}")
+        
+        # Clean up actors
+        print("Destroying actors...")
+        if hasattr(self, 'collision_sensor') and self.collision_sensor:
+            self.collision_sensor.destroy()
+        if hasattr(self, 'lidar') and self.lidar:
+            self.lidar.destroy()
+        if hasattr(self, 'pedestrian') and self.pedestrian:
+            self.pedestrian.destroy()
+        if hasattr(self, 'vehicle') and self.vehicle:
+            self.vehicle.destroy()
+        
+        # Reset world settings
+        if self.world and self.original_settings:
+            self.world.apply_settings(self.original_settings)
+        
+        print("Simulation complete!")
+            
