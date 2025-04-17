@@ -10,12 +10,6 @@ class LidarProcessor:
     def process_point_cloud(point_cloud):
         """
         Process point cloud to find potential objects ahead in the vehicle's path
-        
-        Args:
-            point_cloud: Numpy array of points from LiDAR
-            
-        Returns:
-            dict: Object detection results including distance and location
         """
         # Extract XYZ data from points [x, y, z, intensity]
         if point_cloud.shape[1] >= 4:
@@ -34,12 +28,12 @@ class LidarProcessor:
             return {'object_detected': False, 'distance': float('inf')}
         
         # Use more permissive height filtering for objects (between 0.0m and 3.0m height)
-        height_mask = (forward_points[:, 2] > 0.0) & (forward_points[:, 2] < 3.0)  # Lowered minimum height to 0.0m
+        height_mask = (forward_points[:, 2] > 0.2) & (forward_points[:, 2] < 3.0)  # Increased minimum height to 0.2m to reduce ground noise
         object_candidate_points = forward_points[height_mask]
         
         # Add additional filter: focus on objects in a narrower corridor for the first detection
         # This helps to filter out objects that are far to the sides during initialization
-        narrow_corridor_mask = np.abs(object_candidate_points[:, 1]) < 4.0
+        narrow_corridor_mask = np.abs(object_candidate_points[:, 1]) < 2.0  # Reduced from 4.0 to 2.0 to narrow corridor
         object_candidate_points = object_candidate_points[narrow_corridor_mask]
         
         if len(object_candidate_points) == 0:
@@ -54,8 +48,30 @@ class LidarProcessor:
         min_distance = distances[min_distance_idx]
         closest_point = object_candidate_points[min_distance_idx]
         
+        # Minimum distance check - NEW
+        # Ignore very close detections during early startup as they're likely phantom points
+        if min_distance < 3.0:  # Minimum 3 meters for valid detection
+            vehicle_moving_time = getattr(LidarProcessor, 'vehicle_moving_time', 0)
+            current_time = time.time()
+            
+            if not hasattr(LidarProcessor, 'startup_time'):
+                LidarProcessor.startup_time = current_time
+                LidarProcessor.vehicle_moving_time = 0
+            
+            # If less than 5 seconds since startup, require more points for close object detection
+            if current_time - LidarProcessor.startup_time < 5.0:
+                # Look for clusters of points (improved object detection)
+                cluster_radius = 0.5  # meters, reduced radius for more precision
+                distances_to_closest = np.sqrt(np.sum((object_candidate_points - closest_point)**2, axis=1))
+                cluster_points = object_candidate_points[distances_to_closest < cluster_radius]
+                
+                # Require more points (5) for early detections to filter out phantom points
+                if len(cluster_points) < 5:
+                    print(f"Only {len(cluster_points)} points found in close cluster during startup, need at least 5 for early detection")
+                    return {'object_detected': False, 'distance': float('inf')}
+        
         # Check if point is within a reasonable corridor in front
-        lateral_limit = 10.0  # meters - increased to detect pedestrians with larger offsets
+        lateral_limit = 3.0  # meters - reduced from 10.0 to be more precise
         
         if abs(closest_point[1]) > lateral_limit:
             print(f"Point rejected due to Y-deviation: {abs(closest_point[1]):.2f}m > {lateral_limit}m")

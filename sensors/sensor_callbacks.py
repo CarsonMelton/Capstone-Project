@@ -10,13 +10,14 @@ class SensorCallbacks:
     """Handles sensor callbacks and data processing"""
     
     @staticmethod
-    def lidar_callback(point_cloud_data, lidar_data_list, vehicle=None, sim_start_time=None, enable_autonomous=True):
+    def lidar_callback(point_cloud_data, lidar_data_list, lidar_type='front', vehicle=None, sim_start_time=None, enable_autonomous=True):
         """
         Process LiDAR data, apply autonomous control, and store data
         
         Args:
             point_cloud_data: Raw LiDAR data from CARLA
             lidar_data_list: List to store processed data
+            lidar_type: Type of LiDAR sensor ('front' or 'roof')
             vehicle: CARLA vehicle actor (optional)
             sim_start_time: Timestamp when simulation started (optional)
             enable_autonomous: Whether to enable autonomous control
@@ -28,7 +29,7 @@ class SensorCallbacks:
             point_count = len(data) // 4
             data = np.reshape(data, (point_count, 4))
         except Exception as e:
-            print(f"Error processing LiDAR data: {e}")
+            print(f"Error processing {lidar_type} LiDAR data: {e}")
             
             # Alternative approach for CARLA 10.0
             try:
@@ -39,15 +40,15 @@ class SensorCallbacks:
                 elif len(data) % 3 == 0:
                     data = np.reshape(data, (len(data)//3, 3))
                 else:
-                    print(f"Unknown LiDAR data format: {len(data)} points")
+                    print(f"Unknown {lidar_type} LiDAR data format: {len(data)} points")
                     data = np.array([])  # Empty array as fallback
             except Exception as e2:
-                print(f"Alternative processing also failed: {e2}")
+                print(f"Alternative processing also failed for {lidar_type} LiDAR: {e2}")
                 data = np.array([])  # Empty array as fallback
                 
         # Print debug info about the point cloud periodically
         if len(lidar_data_list) % 20 == 0:
-            print(f"LiDAR scan: {len(data)} points, shape: {data.shape}")
+            print(f"{lidar_type.capitalize()} LiDAR scan: {len(data)} points, shape: {data.shape}")
         
         # Current timestamp
         current_time = datetime.now()
@@ -61,7 +62,8 @@ class SensorCallbacks:
         detection_results = {'object_detected': False, 'distance': float('inf')}
         
         # Only attempt detection and control if enabled and vehicle exists
-        if enable_autonomous and vehicle is not None:
+        # Only use front LiDAR for autonomous control
+        if enable_autonomous and vehicle is not None and lidar_type == 'front':
             # First, check if we have any points at all
             if len(data) > 0:
                 # Process point cloud for detection
@@ -83,7 +85,7 @@ class SensorCallbacks:
                     # Print status message
                     print(f"Applied control: throttle={modified_control.throttle:.2f}, brake={modified_control.brake:.2f}")
             else:
-                print("Warning: LiDAR returned empty point cloud")
+                print(f"Warning: {lidar_type} LiDAR returned empty point cloud")
         
         # Create data entry
         data_entry = {
@@ -91,7 +93,8 @@ class SensorCallbacks:
             'time_since_start_ms': time_since_start_ms,
             'data': data.copy(),
             'frame': point_cloud_data.frame,
-            'detection_results': detection_results
+            'detection_results': detection_results,
+            'lidar_type': lidar_type
         }
         
         # Store the data entry
