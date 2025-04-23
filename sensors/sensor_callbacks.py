@@ -9,15 +9,58 @@ from control.autonomous_controller import AutonomousController
 class SensorCallbacks:
     """Handles sensor callbacks and data processing"""
     
+    # Static variables to store last readings from both sensors for interference simulation
+    last_roof_lidar_data = None
+    last_front_lidar_data = None
+    
     @staticmethod
-    def lidar_callback(point_cloud_data, lidar_data_list, lidar_type='front', vehicle=None, sim_start_time=None, enable_autonomous=True):
+    def simulate_lidar_interference(point_cloud, other_sensor_data, interference_level=0.2):
         """
-        Process LiDAR data, apply autonomous control, and store data
+        Simulate interference between LiDAR sensors by injecting points
+        
+        Args:
+            point_cloud: Primary sensor's point cloud data
+            other_sensor_data: Data from the other sensor that may cause interference
+            interference_level: Level of interference (0.0-1.0)
+            
+        Returns:
+            numpy.ndarray: Point cloud with simulated interference
+        """
+        if other_sensor_data is None or len(other_sensor_data) == 0:
+            return point_cloud
+            
+        # Create a copy of the original point cloud to avoid modifying the original
+        modified_cloud = np.copy(point_cloud)
+        
+        # Select a percentage of points from the other sensor to inject as phantom readings
+        if interference_level > 0:
+            # Determine how many points to inject based on interference level
+            num_points_to_inject = int(len(other_sensor_data) * interference_level * 0.2)  # Up to 20% of other sensor's points
+            
+            if num_points_to_inject > 0 and len(other_sensor_data) > 0:
+                # Randomly select points from other sensor
+                indices = np.random.choice(len(other_sensor_data), min(num_points_to_inject, len(other_sensor_data)), replace=False)
+                phantom_points = other_sensor_data[indices]
+                
+                # Apply slight distortion to phantom points to simulate interference effects
+                distortion = (np.random.random(phantom_points.shape) - 0.5) * 0.5  # ±0.25m distortion
+                phantom_points = phantom_points + distortion
+                
+                # Add phantom points to the original point cloud
+                modified_cloud = np.vstack([modified_cloud, phantom_points])
+                
+                print(f"LiDAR Interference: Added {num_points_to_inject} phantom points from roof LiDAR sensor")
+                
+        return modified_cloud
+    
+    @staticmethod
+    def front_lidar_callback(point_cloud_data, lidar_data_list, vehicle=None, sim_start_time=None, enable_autonomous=True):
+        """
+        Process front LiDAR data with simulated interference, apply autonomous control, and store data
         
         Args:
             point_cloud_data: Raw LiDAR data from CARLA
             lidar_data_list: List to store processed data
-            lidar_type: Type of LiDAR sensor ('front' or 'roof')
             vehicle: CARLA vehicle actor (optional)
             sim_start_time: Timestamp when simulation started (optional)
             enable_autonomous: Whether to enable autonomous control
@@ -29,7 +72,7 @@ class SensorCallbacks:
             point_count = len(data) // 4
             data = np.reshape(data, (point_count, 4))
         except Exception as e:
-            print(f"Error processing {lidar_type} LiDAR data: {e}")
+            print(f"Error processing front LiDAR data: {e}")
             
             # Alternative approach for CARLA 10.0
             try:
@@ -40,15 +83,30 @@ class SensorCallbacks:
                 elif len(data) % 3 == 0:
                     data = np.reshape(data, (len(data)//3, 3))
                 else:
-                    print(f"Unknown {lidar_type} LiDAR data format: {len(data)} points")
+                    print(f"Unknown LiDAR data format: {len(data)} points")
                     data = np.array([])  # Empty array as fallback
             except Exception as e2:
-                print(f"Alternative processing also failed for {lidar_type} LiDAR: {e2}")
+                print(f"Alternative processing also failed: {e2}")
                 data = np.array([])  # Empty array as fallback
+        
+        # Store this reading for reference (not used for interference since we're only applying one-way interference)
+        SensorCallbacks.last_front_lidar_data = data.copy() if len(data) > 0 else None
+        
+        # Apply interference from roof LiDAR (if available)
+        if SensorCallbacks.last_roof_lidar_data is not None and len(data) > 0:
+            # Control interference level (could be made dynamic or configurable)
+            interference_level = 0.2  # 20% interference
+            
+            # Apply simulated interference
+            data = SensorCallbacks.simulate_lidar_interference(
+                data, 
+                SensorCallbacks.last_roof_lidar_data,
+                interference_level
+            )
                 
         # Print debug info about the point cloud periodically
         if len(lidar_data_list) % 20 == 0:
-            print(f"{lidar_type.capitalize()} LiDAR scan: {len(data)} points, shape: {data.shape}")
+            print(f"Front LiDAR scan: {len(data)} points, shape: {data.shape}")
         
         # Current timestamp
         current_time = datetime.now()
@@ -62,8 +120,7 @@ class SensorCallbacks:
         detection_results = {'object_detected': False, 'distance': float('inf')}
         
         # Only attempt detection and control if enabled and vehicle exists
-        # Only use front LiDAR for autonomous control
-        if enable_autonomous and vehicle is not None and lidar_type == 'front':
+        if enable_autonomous and vehicle is not None:
             # First, check if we have any points at all
             if len(data) > 0:
                 # Process point cloud for detection
@@ -85,7 +142,7 @@ class SensorCallbacks:
                     # Print status message
                     print(f"Applied control: throttle={modified_control.throttle:.2f}, brake={modified_control.brake:.2f}")
             else:
-                print(f"Warning: {lidar_type} LiDAR returned empty point cloud")
+                print("Warning: Front LiDAR returned empty point cloud")
         
         # Create data entry
         data_entry = {
@@ -94,7 +151,73 @@ class SensorCallbacks:
             'data': data.copy(),
             'frame': point_cloud_data.frame,
             'detection_results': detection_results,
-            'lidar_type': lidar_type
+            'sensor': 'front'
+        }
+        
+        # Store the data entry
+        lidar_data_list.append(data_entry)
+    
+    @staticmethod
+    def roof_lidar_callback(point_cloud_data, lidar_data_list, vehicle=None, sim_start_time=None, enable_autonomous=True):
+        """
+        Process roof LiDAR data with NO simulated interference and store data
+        
+        Args:
+            point_cloud_data: Raw LiDAR data from CARLA
+            lidar_data_list: List to store processed data
+            vehicle: CARLA vehicle actor (optional)
+            sim_start_time: Timestamp when simulation started (optional)
+            enable_autonomous: Whether to enable autonomous control
+        """
+        # Convert data to numpy array with error handling
+        try:
+            # Try standard approach first
+            data = np.copy(np.frombuffer(point_cloud_data.raw_data, dtype=np.dtype('f4')))
+            point_count = len(data) // 4
+            data = np.reshape(data, (point_count, 4))
+        except Exception as e:
+            print(f"Error processing roof LiDAR data: {e}")
+            
+            # Alternative approach
+            try:
+                data = np.frombuffer(point_cloud_data.raw_data, dtype=np.float32)
+                # Try to detect the format based on data length
+                if len(data) % 4 == 0:
+                    data = np.reshape(data, (len(data)//4, 4))
+                elif len(data) % 3 == 0:
+                    data = np.reshape(data, (len(data)//3, 3))
+                else:
+                    print(f"Unknown LiDAR data format: {len(data)} points")
+                    data = np.array([])  # Empty array as fallback
+            except Exception as e2:
+                print(f"Alternative processing also failed: {e2}")
+                data = np.array([])  # Empty array as fallback
+        
+        # Store this reading for potential interference with front LiDAR
+        SensorCallbacks.last_roof_lidar_data = data.copy() if len(data) > 0 else None
+        
+        # No interference applied to roof LiDAR - it remains clean
+        # This is intentional as we only want the roof sensor to affect the front sensor
+                
+        # Print debug info about the point cloud periodically
+        if len(lidar_data_list) % 20 == 0:
+            print(f"Roof LiDAR scan: {len(data)} points, shape: {data.shape}")
+        
+        # Current timestamp
+        current_time = datetime.now()
+        
+        # Calculate time since simulation started (in milliseconds) if sim_start_time is provided
+        time_since_start_ms = None
+        if sim_start_time is not None:
+            time_since_start_ms = int((current_time - sim_start_time).total_seconds() * 1000)
+        
+        # Create data entry
+        data_entry = {
+            'timestamp': current_time,
+            'time_since_start_ms': time_since_start_ms,
+            'data': data.copy(),
+            'frame': point_cloud_data.frame,
+            'sensor': 'roof'
         }
         
         # Store the data entry

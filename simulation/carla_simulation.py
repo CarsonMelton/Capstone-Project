@@ -23,13 +23,14 @@ class CarlaSimulation:
         self.sensor_callbacks = sensor_callbacks
         
         self.sim_dir = file_manager.create_simulation_directory()
-        self.lidar_data_list = {'front': [], 'roof': []}
+        self.front_lidar_data_list = []  # Changed from lidar_data_list to front_lidar_data_list
+        self.roof_lidar_data_list = []   # Added roof_lidar_data_list
         self.collision_detected = False
         self.stopped_time = 0.0
         self.vehicle = None
         self.pedestrian = None
-        self.front_lidar = None
-        self.roof_lidar = None
+        self.front_lidar = None          # Changed from lidar to front_lidar
+        self.roof_lidar = None           # Added roof_lidar
         self.collision_sensor = None
         self.world = None
         self.client = None
@@ -60,7 +61,7 @@ class CarlaSimulation:
         
         print(f"Connected to CARLA server, synchronous mode: {self.config.sync_mode}")
         return True
-
+    
     def clear_existing_actors(self):
         """Clear all existing actors from the simulation"""
         actor_list = self.world.get_actors()
@@ -235,7 +236,7 @@ class CarlaSimulation:
         try:
             lidar_bp.set_attribute('sensor_tick', '0.0')  # Try to synchronize
         except:
-            print("Could not set sensor_tick parameter for front LiDAR")
+            print("Could not set sensor_tick parameter")
         
         # Try to set noise parameters if available
         for param in ['dropoff_general_rate', 'dropoff_intensity_limit', 'dropoff_zero_intensity', 'noise_stddev']:
@@ -243,25 +244,25 @@ class CarlaSimulation:
                 lidar_bp.set_attribute(param, '0.0')
                 print(f"Set front LiDAR parameter {param} = 0.0")
             except:
-                print(f"Parameter {param} not available for front LiDAR in this CARLA version")
+                print(f"Parameter {param} not available in this CARLA version")
 
-        # Spawn LiDAR with proper transform - positioned at the front of the vehicle
+        # Spawn LiDAR with proper transform - front mounted position
         lidar_transform = carla.Transform(
-            carla.Location(x=2.0, z=1.0),  # Front of vehicle, slightly raised
+            carla.Location(x=2.0, z=0.7),  # Front of vehicle, bumper height
             carla.Rotation(pitch=0, yaw=0, roll=0)  # Forward facing
         )
         
         try:
             self.front_lidar = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=self.vehicle)
-            print(f"Front LiDAR sensor attached to vehicle at position (x=2.0, z=1.0) facing forward")
+            print(f"Front LiDAR sensor attached to vehicle at position (x=2.0, z=0.7) facing forward")
             
             # Set up LiDAR callback for data collection with autonomous control
             if self.config.enable_autonomous:
-                self.front_lidar.listen(lambda data: self.sensor_callbacks.lidar_callback(
-                    data, self.lidar_data_list['front'], 'front', self.vehicle, self.sim_start_time, self.config.enable_autonomous))
+                self.front_lidar.listen(lambda data: self.sensor_callbacks.front_lidar_callback(
+                    data, self.front_lidar_data_list, self.vehicle, self.sim_start_time, self.config.enable_autonomous))
             else:
-                self.front_lidar.listen(lambda data: self.sensor_callbacks.lidar_callback(
-                    data, self.lidar_data_list['front'], 'front', None, self.sim_start_time, False))
+                self.front_lidar.listen(lambda data: self.sensor_callbacks.front_lidar_callback(
+                    data, self.front_lidar_data_list, None, self.sim_start_time, False))
             
             return True
         except Exception as e:
@@ -272,11 +273,11 @@ class CarlaSimulation:
         """Set up the roof LiDAR sensor on the vehicle"""
         blueprint_library = self.world.get_blueprint_library()
         
-        # Configure LiDAR settings
+        # Configure LiDAR settings for roof sensor
         lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
         print(f"Setting up roof LiDAR with blueprint: {lidar_bp.id}")
         
-        # Basic settings
+        # Basic settings similar to front LiDAR, but with wider FOV
         lidar_bp.set_attribute('channels', str(self.config.lidar_channels))
         lidar_bp.set_attribute('points_per_second', str(self.config.lidar_points_per_second))
         lidar_bp.set_attribute('rotation_frequency', str(self.config.lidar_frequency))
@@ -284,43 +285,40 @@ class CarlaSimulation:
         
         # Set these if available in CARLA 10.0
         try:
-            lidar_bp.set_attribute('upper_fov', str(self.config.lidar_upper_fov))
-            lidar_bp.set_attribute('lower_fov', str(self.config.lidar_lower_fov))
-            print("Set roof LiDAR vertical FOV parameters")
+            # Wider vertical FOV for roof LiDAR
+            lidar_bp.set_attribute('upper_fov', str(self.config.lidar_upper_fov + 5.0))  # Increased upper FOV
+            lidar_bp.set_attribute('lower_fov', str(self.config.lidar_lower_fov - 5.0))  # Increased lower FOV
+            print("Set roof LiDAR vertical FOV parameters with wider range")
         except Exception as e:
             print(f"Could not set roof LiDAR FOV parameters: {e}")
         
-        # Additional parameters
+        # Try to set additional parameters if available
         try:
             lidar_bp.set_attribute('sensor_tick', '0.0')  # Try to synchronize
         except:
             print("Could not set sensor_tick parameter for roof LiDAR")
         
-        # Noise parameters
+        # Try to set noise parameters if available
         for param in ['dropoff_general_rate', 'dropoff_intensity_limit', 'dropoff_zero_intensity', 'noise_stddev']:
             try:
                 lidar_bp.set_attribute(param, '0.0')
                 print(f"Set roof LiDAR parameter {param} = 0.0")
             except:
-                print(f"Parameter {param} not available for roof LiDAR in this CARLA version")
+                print(f"Parameter {param} not available in this CARLA version")
 
-        # Spawn LiDAR with proper transform - positioned on the roof for better overview
+        # Spawn LiDAR with proper transform - roof mounted position
         lidar_transform = carla.Transform(
-            carla.Location(x=0.0, z=2.0),  # Center of the roof
+            carla.Location(x=0.0, z=2.0),  # Top center of vehicle for better overall visibility
             carla.Rotation(pitch=0, yaw=0, roll=0)  # Forward facing
         )
         
         try:
             self.roof_lidar = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=self.vehicle)
-            print(f"Roof LiDAR sensor attached to vehicle at position (x=0.0, z=2.0) facing forward")
+            print(f"Roof LiDAR sensor attached to vehicle at position (x=0.0, z=2.0) with 360° view")
             
-            # Set up LiDAR callback for data collection
-            if self.config.enable_autonomous:
-                self.roof_lidar.listen(lambda data: self.sensor_callbacks.lidar_callback(
-                    data, self.lidar_data_list['roof'], 'roof', self.vehicle, self.sim_start_time, self.config.enable_autonomous))
-            else:
-                self.roof_lidar.listen(lambda data: self.sensor_callbacks.lidar_callback(
-                    data, self.lidar_data_list['roof'], 'roof', None, self.sim_start_time, False))
+            # Set up LiDAR callback for data collection (without autonomous control for this sensor)
+            self.roof_lidar.listen(lambda data: self.sensor_callbacks.roof_lidar_callback(
+                data, self.roof_lidar_data_list, self.vehicle, self.sim_start_time, False))
             
             return True
         except Exception as e:
@@ -372,11 +370,11 @@ class CarlaSimulation:
         if not self.setup_pedestrian():
             return False
         
-        # Setup front LiDAR
+        # Setup front LiDAR (for detecting obstacles and autonomous braking)
         if not self.setup_front_lidar():
             return False
         
-        # Setup roof LiDAR
+        # Setup roof LiDAR (for wider visibility and interference simulation)
         if not self.setup_roof_lidar():
             return False
         
@@ -388,9 +386,10 @@ class CarlaSimulation:
         self.sim_start_time = datetime.now()
         
         print(f"\nSimulation initialized with {'AUTONOMOUS MODE ENABLED' if self.config.enable_autonomous else 'autonomous mode disabled'}")
+        print(f"LiDAR interference simulation is active between front and roof sensors")
         return True
     
-    def visualize_detection(self, debug, recent_data, detection_results, lidar_type='front'):
+    def visualize_detection(self, debug, recent_data, detection_results):
         """Visualize LiDAR points and object detection in the simulation"""
         car_pos = self.vehicle.get_location()
         
@@ -407,16 +406,11 @@ class CarlaSimulation:
                     z=car_pos.z + point[2]
                 )
                 
-                # Draw a dot for each LiDAR point with color based on LiDAR type
-                if lidar_type == 'front':
-                    color = carla.Color(255, 0, 0, 255)  # Red for front LiDAR
-                else:  # 'roof'
-                    color = carla.Color(0, 255, 0, 255)  # Green for roof LiDAR
-                    
+                # Draw a dot for each LiDAR point
                 debug.draw_point(
                     point_loc,
                     size=0.05,
-                    color=color,
+                    color=carla.Color(0, 255, 0, 255),  # Green dots for raw LiDAR
                     life_time=0.1
                 )
         except Exception as e:
@@ -560,14 +554,26 @@ class CarlaSimulation:
         """Clean up simulation resources and save data"""
         print("Cleaning up and saving data...")
         
-        # Save the collected LiDAR data
+        # Save the collected LiDAR data from both sensors
         self.file_manager.save_lidar_data(
             self.sim_dir, 
-            self.lidar_data_list, 
+            self.front_lidar_data_list, 
             self.collision_detected, 
             self.config.enable_autonomous, 
             self.frame,
-            self.stopped_time
+            self.stopped_time,
+            sensor_name="front"
+        )
+        
+        # Save the roof LiDAR data
+        self.file_manager.save_lidar_data(
+            self.sim_dir, 
+            self.roof_lidar_data_list, 
+            self.collision_detected, 
+            False,  # Roof LiDAR doesn't control vehicle
+            self.frame,
+            self.stopped_time,
+            sensor_name="roof"
         )
         
         # Print summary of outcome
@@ -581,8 +587,8 @@ class CarlaSimulation:
                 print("\nSIMULATION OUTCOME: No collision detected with pedestrian")
                 
         print(f"Total frames: {self.frame}")
-        print(f"Total front LiDAR scans: {len(self.lidar_data_list['front'])}")
-        print(f"Total roof LiDAR scans: {len(self.lidar_data_list['roof'])}")
+        print(f"Total front LiDAR scans: {len(self.front_lidar_data_list)}")
+        print(f"Total roof LiDAR scans: {len(self.roof_lidar_data_list)}")
         
         # Clean up actors
         print("Destroying actors...")
