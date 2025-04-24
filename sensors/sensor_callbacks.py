@@ -27,10 +27,18 @@ class SensorCallbacks:
             numpy.ndarray: Point cloud with simulated interference
         """
         if other_sensor_data is None or len(other_sensor_data) == 0:
-            return point_cloud
+            # Add phantom flag column (0 = real point)
+            phantom_flags = np.zeros((len(point_cloud), 1))
+            return np.hstack([point_cloud, phantom_flags])
             
         # Create a copy of the original point cloud to avoid modifying the original
         modified_cloud = np.copy(point_cloud)
+        
+        # Add phantom flag column (0 = real point, 1 = phantom point)
+        phantom_flags_original = np.zeros((len(modified_cloud), 1))
+        
+        # Combine original points with flags
+        modified_cloud_with_flags = np.hstack([modified_cloud, phantom_flags_original])
         
         # Select a percentage of points from the other sensor to inject as phantom readings
         if interference_level > 0:
@@ -46,12 +54,20 @@ class SensorCallbacks:
                 distortion = (np.random.random(phantom_points.shape) - 0.5) * 0.5  # ±0.25m distortion
                 phantom_points = phantom_points + distortion
                 
+                # Create phantom flags for the new points (1 = phantom point)
+                phantom_flags_new = np.ones((len(phantom_points), 1))
+                
+                # Combine phantom points with flags
+                phantom_points_with_flags = np.hstack([phantom_points, phantom_flags_new])
+                
                 # Add phantom points to the original point cloud
-                modified_cloud = np.vstack([modified_cloud, phantom_points])
+                result = np.vstack([modified_cloud_with_flags, phantom_points_with_flags])
                 
                 print(f"LiDAR Interference: Added {num_points_to_inject} phantom points from roof LiDAR sensor")
-                
-        return modified_cloud
+                return result
+        
+        # If no interference was added, return the original cloud with flags            
+        return modified_cloud_with_flags
     
     @staticmethod
     def front_lidar_callback(point_cloud_data, lidar_data_list, vehicle=None, sim_start_time=None, enable_autonomous=True):
