@@ -258,11 +258,15 @@ class CarlaSimulation:
             
             # Set up LiDAR callback for data collection with autonomous control
             if self.config.enable_autonomous:
+                # Pass the config to the callback
                 self.front_lidar.listen(lambda data: self.sensor_callbacks.front_lidar_callback(
-                    data, self.front_lidar_data_list, self.vehicle, self.sim_start_time, self.config.enable_autonomous))
+                    data, self.front_lidar_data_list, self.vehicle, self.sim_start_time, 
+                    self.config.enable_autonomous, self.config))
             else:
+                # Pass the config even when autonomous mode is disabled
                 self.front_lidar.listen(lambda data: self.sensor_callbacks.front_lidar_callback(
-                    data, self.front_lidar_data_list, None, self.sim_start_time, False))
+                    data, self.front_lidar_data_list, None, self.sim_start_time, 
+                    False, self.config))
             
             return True
         except Exception as e:
@@ -317,14 +321,16 @@ class CarlaSimulation:
             print(f"Roof LiDAR sensor attached to vehicle at position (x=0.0, z=2.0) with 360° view")
             
             # Set up LiDAR callback for data collection (without autonomous control for this sensor)
+            # Pass the config to the callback
             self.roof_lidar.listen(lambda data: self.sensor_callbacks.roof_lidar_callback(
-                data, self.roof_lidar_data_list, self.vehicle, self.sim_start_time, False))
+                data, self.roof_lidar_data_list, self.vehicle, self.sim_start_time, 
+                False, self.config))
             
             return True
         except Exception as e:
             print(f"Error setting up roof LiDAR: {e}")
             return False
-    
+        
     def setup_collision_sensor(self):
         """Set up collision sensor on the vehicle"""
         blueprint_library = self.world.get_blueprint_library()

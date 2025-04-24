@@ -14,14 +14,14 @@ class SensorCallbacks:
     last_front_lidar_data = None
     
     @staticmethod
-    def simulate_lidar_interference(point_cloud, other_sensor_data, interference_level=0.2):
+    def simulate_lidar_interference(point_cloud, other_sensor_data, config):
         """
         Simulate interference between LiDAR sensors by injecting points
         
         Args:
             point_cloud: Primary sensor's point cloud data
             other_sensor_data: Data from the other sensor that may cause interference
-            interference_level: Level of interference (0.0-1.0)
+            config: SimulationConfig instance with interference parameters
             
         Returns:
             numpy.ndarray: Point cloud with simulated interference
@@ -41,19 +41,19 @@ class SensorCallbacks:
         modified_cloud_with_flags = np.hstack([modified_cloud, phantom_flags_original])
         
         # Select a percentage of points from the other sensor to inject as phantom readings
-        if interference_level > 0:
-            # More realistic interference parameters
-            base_rate = 0.1
-            probability_factor = 0.2
+        if config.simulate_interference:
+            # Use parameters from config
+            base_rate = config.interference_base_rate
+            probability_factor = config.interference_probability_factor
             
             # Calculate number of points to potentially inject
             candidates = int(len(other_sensor_data) * base_rate)
-            num_points_to_inject = int(candidates * probability_factor * interference_level)
+            num_points_to_inject = int(candidates * probability_factor)
             
             # Add randomness - some frames may have more interference than others
             # Occasional "burst" of interference
-            if np.random.random() < 0.1:  # 10% chance of a burst
-                num_points_to_inject = int(num_points_to_inject * 4)  # Quadruple the points during burst
+            if np.random.random() < config.interference_burst_chance:  # Chance of a burst
+                num_points_to_inject = int(num_points_to_inject * config.interference_burst_multiplier)
                 print("Interference burst detected!")
             
             if num_points_to_inject > 0 and len(other_sensor_data) > 0:
@@ -64,15 +64,15 @@ class SensorCallbacks:
                 # More realistic distortion model
                 # Points closer to sensor origin have less distortion
                 distances = np.sqrt(np.sum(phantom_points[:, :3]**2, axis=1))
-                distance_factor = np.minimum(distances / 20.0, 1.0)  # Normalize to 0-1 range, cap at 1
+                distance_factor = np.minimum(distances / config.phantom_point_max_distance, 1.0)  # Normalize to 0-1 range, cap at 1
                 
                 # Apply variable distortion based on distance
-                distortion_scale = 0.2 + (0.6 * distance_factor.reshape(-1, 1))  # Greater distortion at distance
+                distortion_scale = config.interference_distortion_base + (config.interference_distortion_range * distance_factor.reshape(-1, 1))
                 distortion = (np.random.random(phantom_points.shape) - 0.5) * distortion_scale
                 phantom_points = phantom_points + distortion
                 
                 # Concentration effect - phantom points tend to appear in clusters
-                if num_points_to_inject >= 3 and np.random.random() < 0.3:  # 30% chance
+                if num_points_to_inject >= 3 and np.random.random() < config.interference_cluster_chance:
                     # Create a few anchor points and cluster others around them
                     anchor_count = max(1, num_points_to_inject // 5)
                     anchor_indices = np.random.choice(num_points_to_inject, anchor_count, replace=False)
@@ -83,8 +83,8 @@ class SensorCallbacks:
                         if i not in anchor_indices:
                             # Choose random anchor
                             anchor = anchor_points[np.random.randint(0, anchor_count)]
-                            # Move 30-70% closer to that anchor
-                            blend_factor = 0.3 + (0.4 * np.random.random())
+                            # Move closer to that anchor with configurable blend factor
+                            blend_factor = config.interference_blend_factor_min + ((config.interference_blend_factor_max - config.interference_blend_factor_min) * np.random.random())
                             phantom_points[i, :3] = phantom_points[i, :3] * (1 - blend_factor) + anchor[:3] * blend_factor
                 
                 # Create phantom flags for the new points (1 = phantom point)
@@ -103,7 +103,7 @@ class SensorCallbacks:
         return modified_cloud_with_flags
     
     @staticmethod
-    def front_lidar_callback(point_cloud_data, lidar_data_list, vehicle=None, sim_start_time=None, enable_autonomous=True):
+    def front_lidar_callback(point_cloud_data, lidar_data_list, vehicle=None, sim_start_time=None, enable_autonomous=True, config=None):
         """
         Process front LiDAR data with simulated interference, apply autonomous control, and store data
         
@@ -113,6 +113,7 @@ class SensorCallbacks:
             vehicle: CARLA vehicle actor (optional)
             sim_start_time: Timestamp when simulation started (optional)
             enable_autonomous: Whether to enable autonomous control
+            config: SimulationConfig instance with interference parameters
         """
         # Convert data to numpy array with error handling for different CARLA versions
         try:
@@ -142,9 +143,9 @@ class SensorCallbacks:
         SensorCallbacks.last_front_lidar_data = data.copy() if len(data) > 0 else None
         
         # Apply interference from roof LiDAR (if available)
-        if SensorCallbacks.last_roof_lidar_data is not None and len(data) > 0:
+        if SensorCallbacks.last_roof_lidar_data is not None and len(data) > 0 and config is not None:
             # More realistic and variable interference
-            base_interference = 0.1
+            base_interference = config.interference_base_level
             
             # Time-varying interference pattern
             if hasattr(SensorCallbacks, 'time_offset'):
@@ -153,7 +154,7 @@ class SensorCallbacks:
                 SensorCallbacks.time_offset = 0
             
             # Occasionally increase interference (simulating passing reflective surfaces, etc)
-            time_factor = np.sin(SensorCallbacks.time_offset / 10.0) * 0.03  # Adds ±3% oscillation
+            time_factor = np.sin(SensorCallbacks.time_offset / 10.0) * config.interference_time_factor_amplitude
             
             # Ensure interference stays positive and doesn't exceed reasonable limits
             interference_level = max(0.01, min(0.15, base_interference + time_factor))
@@ -162,7 +163,7 @@ class SensorCallbacks:
             data = SensorCallbacks.simulate_lidar_interference(
                 data, 
                 SensorCallbacks.last_roof_lidar_data,
-                interference_level
+                config
             )
                 
         # Print debug info about the point cloud periodically
@@ -219,7 +220,7 @@ class SensorCallbacks:
         lidar_data_list.append(data_entry)
     
     @staticmethod
-    def roof_lidar_callback(point_cloud_data, lidar_data_list, vehicle=None, sim_start_time=None, enable_autonomous=True):
+    def roof_lidar_callback(point_cloud_data, lidar_data_list, vehicle=None, sim_start_time=None, enable_autonomous=True, config=None):
         """
         Process roof LiDAR data with NO simulated interference and store data
         
@@ -229,6 +230,7 @@ class SensorCallbacks:
             vehicle: CARLA vehicle actor (optional)
             sim_start_time: Timestamp when simulation started (optional)
             enable_autonomous: Whether to enable autonomous control
+            config: SimulationConfig instance with interference parameters
         """
         # Convert data to numpy array with error handling
         try:

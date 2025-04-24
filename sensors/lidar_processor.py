@@ -2,6 +2,7 @@
 """LiDAR point cloud processing for object detection"""
 
 import numpy as np
+import time
 
 class LidarProcessor:
     """Processes LiDAR point clouds for object detection"""
