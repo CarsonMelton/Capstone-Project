@@ -59,7 +59,6 @@ class CarlaSimulation:
         settings.no_rendering_mode = self.config.no_rendering
         self.world.apply_settings(settings)
         
-        print(f"Connected to CARLA server, synchronous mode: {self.config.sync_mode}")
         return True
     
     def clear_existing_actors(self):
@@ -102,7 +101,6 @@ class CarlaSimulation:
         
         # Wait for cleanup to complete
         time.sleep(1.0)
-        print("Cleared existing actors from simulation")
         return True
     
     def setup_vehicle(self):
@@ -133,7 +131,6 @@ class CarlaSimulation:
             self.vehicle = self.world.spawn_actor(vehicle_bp, vehicle_spawn_point)
             # Apply physics control to the vehicle after spawning
             self.vehicle.apply_physics_control(physics_control)
-            print(f"Vehicle spawned: {self.config.vehicle_type}")
             return True
         except RuntimeError as e:
             print(f"VEHICLE SPAWN ERROR: {str(e)}")
@@ -148,7 +145,6 @@ class CarlaSimulation:
             walker_bps = blueprint_library.filter('walker')
             if walker_bps:
                 pedestrian_bp = walker_bps[0]
-                print(f"Using walker blueprint: {pedestrian_bp.id}")
             else:
                 raise RuntimeError("No walker blueprints found in the blueprint library")
         except Exception as e:
@@ -177,11 +173,6 @@ class CarlaSimulation:
             carla.Rotation(yaw=180)  # Facing toward the car
         )
         
-        # Print coordinates to help debug positioning
-        print(f"Vehicle spawn coordinates: x={self.config.original_x - self.config.car_setback}, y={self.config.original_y + self.config.car_right_offset}")
-        print(f"Pedestrian spawn coordinates: x={self.config.original_x - self.config.car_setback + self.config.pedestrian_distance_adjusted}, y={self.config.original_y + self.config.car_right_offset}")
-        print(f"Y-offset between vehicle and pedestrian: 0.0m (should be identical)")
-        
         try:
             self.pedestrian = self.world.spawn_actor(pedestrian_bp, pedestrian_spawn_point)
             
@@ -200,7 +191,6 @@ class CarlaSimulation:
             self.world.tick()
             time.sleep(0.2)
             
-            print("Static pedestrian placed in vehicle path with physics and collision enabled")
             return True
                 
         except RuntimeError as e:
@@ -216,7 +206,6 @@ class CarlaSimulation:
         
         # Configure LiDAR settings with improved object detection for CARLA 10.0
         lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
-        print(f"Setting up front LiDAR with blueprint: {lidar_bp.id}")
         
         # Basic settings that should work in most CARLA versions
         lidar_bp.set_attribute('channels', str(self.config.lidar_channels))
@@ -228,7 +217,6 @@ class CarlaSimulation:
         try:
             lidar_bp.set_attribute('upper_fov', str(self.config.lidar_upper_fov))
             lidar_bp.set_attribute('lower_fov', str(self.config.lidar_lower_fov))
-            print("Set front LiDAR vertical FOV parameters")
         except Exception as e:
             print(f"Could not set front LiDAR FOV parameters: {e}")
         
@@ -242,7 +230,6 @@ class CarlaSimulation:
         for param in ['dropoff_general_rate', 'dropoff_intensity_limit', 'dropoff_zero_intensity', 'noise_stddev']:
             try:
                 lidar_bp.set_attribute(param, '0.0')
-                print(f"Set front LiDAR parameter {param} = 0.0")
             except:
                 print(f"Parameter {param} not available in this CARLA version")
 
@@ -254,7 +241,6 @@ class CarlaSimulation:
         
         try:
             self.front_lidar = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=self.vehicle)
-            print(f"Front LiDAR sensor attached to vehicle at position (x=2.0, z=0.7) facing forward")
             
             # Set up LiDAR callback for data collection with autonomous control
             if self.config.enable_autonomous:
@@ -279,7 +265,6 @@ class CarlaSimulation:
         
         # Configure LiDAR settings for roof sensor
         lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
-        print(f"Setting up roof LiDAR with blueprint: {lidar_bp.id}")
         
         # Basic settings similar to front LiDAR, but with wider FOV
         lidar_bp.set_attribute('channels', str(self.config.lidar_channels))
@@ -292,7 +277,6 @@ class CarlaSimulation:
             # Wider vertical FOV for roof LiDAR
             lidar_bp.set_attribute('upper_fov', str(self.config.lidar_upper_fov + 5.0))  # Increased upper FOV
             lidar_bp.set_attribute('lower_fov', str(self.config.lidar_lower_fov - 5.0))  # Increased lower FOV
-            print("Set roof LiDAR vertical FOV parameters with wider range")
         except Exception as e:
             print(f"Could not set roof LiDAR FOV parameters: {e}")
         
@@ -306,7 +290,6 @@ class CarlaSimulation:
         for param in ['dropoff_general_rate', 'dropoff_intensity_limit', 'dropoff_zero_intensity', 'noise_stddev']:
             try:
                 lidar_bp.set_attribute(param, '0.0')
-                print(f"Set roof LiDAR parameter {param} = 0.0")
             except:
                 print(f"Parameter {param} not available in this CARLA version")
 
@@ -318,7 +301,6 @@ class CarlaSimulation:
         
         try:
             self.roof_lidar = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=self.vehicle)
-            print(f"Roof LiDAR sensor attached to vehicle at position (x=0.0, z=2.0) with 360° view")
             
             # Set up LiDAR callback for data collection (without autonomous control for this sensor)
             # Pass the config to the callback
@@ -351,7 +333,6 @@ class CarlaSimulation:
             # Store the collision detection reference
             self.collision_detected = collision_detected_ref[0]
             
-            print("Collision sensor attached to vehicle")
             return True
         except Exception as e:
             print(f"Error setting up collision sensor: {e}")
@@ -359,7 +340,6 @@ class CarlaSimulation:
     
     def initialize_simulation(self):
         """Initialize all components of the simulation"""
-        print("\nInitializing CARLA simulation...")
         
         # Setup CARLA connection
         if not self.setup_carla_connection():
@@ -391,8 +371,6 @@ class CarlaSimulation:
         # Record the simulation start time
         self.sim_start_time = datetime.now()
         
-        print(f"\nSimulation initialized with {'AUTONOMOUS MODE ENABLED' if self.config.enable_autonomous else 'autonomous mode disabled'}")
-        print(f"LiDAR interference simulation is active between front and roof sensors")
         return True
     
     def visualize_detection(self, debug, recent_data, detection_results):
@@ -471,14 +449,13 @@ class CarlaSimulation:
         start_time = datetime.now()
         
         try:
-            print("Starting simulation loop...")
             while not self.exit_requested:
                 current_time = datetime.now()
                 elapsed_seconds = (current_time - start_time).total_seconds()
                 
                 # Start vehicle movement after 1 second (reduced waiting time)
                 if not self.movement_started and elapsed_seconds > 1.0:
-                    print("Starting vehicle movement...")
+                    print("Starting Movement...")
                     # Make sure autopilot is off
                     self.vehicle.set_autopilot(False)
                     
@@ -504,7 +481,6 @@ class CarlaSimulation:
                     # Now apply regular control
                     self.vehicle.apply_control(vehicle_control)
                     self.movement_started = True
-                    print("Vehicle movement started - throttle:", vehicle_control.throttle)
                 
                 # Update the simulation
                 self.world.tick()
@@ -528,9 +504,6 @@ class CarlaSimulation:
                     speed_ms = np.sqrt(vel.x**2 + vel.y**2 + vel.z**2)
                     speed_mph = speed_ms * 2.23694  # Convert to mph
                     
-                    # Print stats
-                    print(f"Distance to pedestrian: {distance:.2f}m | Speed: {speed_mph:.2f} mph | Simulation time: {elapsed_seconds:.2f}s")
-                    
                     # Monitor for simulation timeout or completion
                     if elapsed_seconds > self.config.max_simulation_time:
                         print(f"Simulation timeout reached ({self.config.max_simulation_time} seconds). Ending simulation.")
@@ -538,9 +511,6 @@ class CarlaSimulation:
                     
                     # Monitor for vehicle passing the pedestrian without collision
                     if car_pos.x > ped_pos.x + 10 and not self.collision_detected:
-                        print("Vehicle has passed the pedestrian without collision. Simulation complete.")
-                        if self.config.enable_autonomous:
-                            print(f"Autonomous braking successfully avoided collision!")
                         self.exit_requested = True
                 
                 # Increment frame counter
@@ -581,23 +551,12 @@ class CarlaSimulation:
             self.stopped_time,
             sensor_name="roof"
         )
-        
-        # Print summary of outcome
-        if self.collision_detected:
-            print("\nSIMULATION OUTCOME: Collision occurred with pedestrian")
-        else:
-            if self.stopped_time >= 1.0:
-                print("\nSIMULATION OUTCOME: Vehicle successfully stopped before pedestrian")
-                print(f"Autonomous braking system prevented collision")
-            else:
-                print("\nSIMULATION OUTCOME: No collision detected with pedestrian")
                 
         print(f"Total frames: {self.frame}")
         print(f"Total front LiDAR scans: {len(self.front_lidar_data_list)}")
         print(f"Total roof LiDAR scans: {len(self.roof_lidar_data_list)}")
         
         # Clean up actors
-        print("Destroying actors...")
         if hasattr(self, 'collision_sensor') and self.collision_sensor:
             self.collision_sensor.destroy()
         if hasattr(self, 'front_lidar') and self.front_lidar:
@@ -613,4 +572,3 @@ class CarlaSimulation:
         if self.world and self.original_settings:
             self.world.apply_settings(self.original_settings)
         
-        print("Simulation complete!")

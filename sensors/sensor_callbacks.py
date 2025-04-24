@@ -54,7 +54,7 @@ class SensorCallbacks:
             # Occasional "burst" of interference
             if np.random.random() < config.interference_burst_chance:  # Chance of a burst
                 num_points_to_inject = int(num_points_to_inject * config.interference_burst_multiplier)
-                print("Interference burst detected!")
+                print("Interference Burst!")
             
             if num_points_to_inject > 0 and len(other_sensor_data) > 0:
                 # Randomly select points from other sensor
@@ -96,7 +96,7 @@ class SensorCallbacks:
                 # Add phantom points to the original point cloud
                 result = np.vstack([modified_cloud_with_flags, phantom_points_with_flags])
                 
-                print(f"LiDAR Interference: Added {num_points_to_inject} phantom points from other sensor")
+                print(f"Added {num_points_to_inject} Phantom Points")
                 return result
         
         # If no interference was added, return the original cloud with flags            

@@ -25,7 +25,7 @@ class LidarProcessor:
         forward_points = xyz[forward_mask]
         
         if len(forward_points) == 0:
-            print("No forward points detected in LiDAR data")
+            print("No forward points detected")
             return {'object_detected': False, 'distance': float('inf')}
         
         # Use more permissive height filtering for objects (between 0.0m and 3.0m height)
@@ -38,7 +38,7 @@ class LidarProcessor:
         object_candidate_points = object_candidate_points[narrow_corridor_mask]
         
         if len(object_candidate_points) == 0:
-            print("No object-height points detected")
+            print("No candidate points detected")
             return {'object_detected': False, 'distance': float('inf')}
         
         # Calculate distance for each potential object point
@@ -68,11 +68,10 @@ class LidarProcessor:
                 
                 # Require more points (5) for early detections to filter out phantom points
                 if len(cluster_points) < 5:
-                    print(f"Only {len(cluster_points)} points found in close cluster during startup, need at least 5 for early detection")
                     return {'object_detected': False, 'distance': float('inf')}
         
         # Check if point is within a reasonable corridor in front
-        lateral_limit = 3.0  # meters - reduced from 10.0 to be more precise
+        lateral_limit = 3.0
         
         if abs(closest_point[1]) > lateral_limit:
             print(f"Point rejected due to Y-deviation: {abs(closest_point[1]):.2f}m > {lateral_limit}m")
@@ -85,11 +84,8 @@ class LidarProcessor:
         cluster_points = object_candidate_points[distances_to_closest < cluster_radius]
         
         # Check if we have enough points to confidently say we've detected an object
-        if len(cluster_points) < 2:  # Reduced requirement: only need 2 points instead of 3
-            print(f"Only {len(cluster_points)} points found in cluster, need at least 2 for detection")
+        if len(cluster_points) < 3: # Might have to switch back to 2
             return {'object_detected': False, 'distance': float('inf')}
-        
-        print(f"OBJECT DETECTED at {min_distance:.2f}m with {len(cluster_points)} points in cluster. Y-offset: {abs(closest_point[1]):.2f}m")
         
         # Return detection results
         return {

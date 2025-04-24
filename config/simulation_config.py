@@ -40,13 +40,6 @@ class SimulationConfig:
                 'position': (2.5, 0.0, 0.5),  # front bumper position
                 'rotation': (0.0, 0.0, 0.0),
                 'id_wavelength': 915,  # slightly different wavelength
-            },
-            # Rear LiDAR
-            {
-                'name': 'rear_lidar',
-                'position': (-2.5, 0.0, 0.7),  # rear position
-                'rotation': (0.0, 180.0, 0.0),  # facing backward
-                'id_wavelength': 925,  # different wavelength
             }
         ]
    
@@ -54,12 +47,12 @@ class SimulationConfig:
         self.simulate_interference = True
         
 
-        self.interference_base_level = 0.1  # Base percentage of interference applied
+        self.interference_base_level = 0.15  # Base percentage of interference applied
         self.interference_time_factor_amplitude = 0.03  # Controls the amplitude of time-varying oscillation
         
         self.interference_base_rate = 0.1  # Percentage of points considered as candidates
-        self.interference_probability_factor = 0.2 # Fraction of candidate points that become phantom points
-        self.interference_burst_chance = 0.1  # Probability of a sudden "burst" of increased interference
+        self.interference_probability_factor = 0.3 # Fraction of candidate points that become phantom points
+        self.interference_burst_chance = 0.15  # Probability of a sudden "burst" of increased interference
         self.interference_burst_multiplier = 4.0  # Multiplier for phantom points during a burst
         self.interference_distortion_base = 0.2  # Minimum distortion applied to phantom points
         self.interference_distortion_range = 0.6  # Additional distortion applied based on distance

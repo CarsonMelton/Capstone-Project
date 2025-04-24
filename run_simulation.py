@@ -17,7 +17,7 @@ from simulation.carla_simulation import CarlaSimulation
 def main():
     """Main function to run the simulation"""
     try:
-        print("Starting CARLA pedestrian collision test simulation")
+        print("Starting CARLA Simulation")
         
         # Initialize configuration
         config = SimulationConfig()
