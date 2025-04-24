@@ -52,8 +52,8 @@ class SimulationConfig:
    
         # Interference simulation
         self.simulate_interference = True
-        self.direct_interference_probability = 0.005  # Reduced from 0.02
-        self.scattered_interference_probability = 0.001  # Reduced from 0.005
+        self.direct_interference_probability = 0.01
+        self.scattered_interference_probability = 0.002
         self.phantom_point_max_distance = 20.0
         self.interference_max_range_error = 15.0
        

@@ -42,17 +42,50 @@ class SensorCallbacks:
         
         # Select a percentage of points from the other sensor to inject as phantom readings
         if interference_level > 0:
-            # Determine how many points to inject based on interference level
-            num_points_to_inject = int(len(other_sensor_data) * interference_level * 0.2)  # Up to 20% of other sensor's points
+            # More realistic interference parameters
+            base_rate = 0.1
+            probability_factor = 0.2
+            
+            # Calculate number of points to potentially inject
+            candidates = int(len(other_sensor_data) * base_rate)
+            num_points_to_inject = int(candidates * probability_factor * interference_level)
+            
+            # Add randomness - some frames may have more interference than others
+            # Occasional "burst" of interference
+            if np.random.random() < 0.1:  # 10% chance of a burst
+                num_points_to_inject = int(num_points_to_inject * 4)  # Quadruple the points during burst
+                print("Interference burst detected!")
             
             if num_points_to_inject > 0 and len(other_sensor_data) > 0:
                 # Randomly select points from other sensor
                 indices = np.random.choice(len(other_sensor_data), min(num_points_to_inject, len(other_sensor_data)), replace=False)
                 phantom_points = other_sensor_data[indices]
                 
-                # Apply slight distortion to phantom points to simulate interference effects
-                distortion = (np.random.random(phantom_points.shape) - 0.5) * 0.5  # ±0.25m distortion
+                # More realistic distortion model
+                # Points closer to sensor origin have less distortion
+                distances = np.sqrt(np.sum(phantom_points[:, :3]**2, axis=1))
+                distance_factor = np.minimum(distances / 20.0, 1.0)  # Normalize to 0-1 range, cap at 1
+                
+                # Apply variable distortion based on distance
+                distortion_scale = 0.2 + (0.6 * distance_factor.reshape(-1, 1))  # Greater distortion at distance
+                distortion = (np.random.random(phantom_points.shape) - 0.5) * distortion_scale
                 phantom_points = phantom_points + distortion
+                
+                # Concentration effect - phantom points tend to appear in clusters
+                if num_points_to_inject >= 3 and np.random.random() < 0.3:  # 30% chance
+                    # Create a few anchor points and cluster others around them
+                    anchor_count = max(1, num_points_to_inject // 5)
+                    anchor_indices = np.random.choice(num_points_to_inject, anchor_count, replace=False)
+                    anchor_points = phantom_points[anchor_indices]
+                    
+                    # For non-anchor points, move them closer to a random anchor
+                    for i in range(len(phantom_points)):
+                        if i not in anchor_indices:
+                            # Choose random anchor
+                            anchor = anchor_points[np.random.randint(0, anchor_count)]
+                            # Move 30-70% closer to that anchor
+                            blend_factor = 0.3 + (0.4 * np.random.random())
+                            phantom_points[i, :3] = phantom_points[i, :3] * (1 - blend_factor) + anchor[:3] * blend_factor
                 
                 # Create phantom flags for the new points (1 = phantom point)
                 phantom_flags_new = np.ones((len(phantom_points), 1))
@@ -63,7 +96,7 @@ class SensorCallbacks:
                 # Add phantom points to the original point cloud
                 result = np.vstack([modified_cloud_with_flags, phantom_points_with_flags])
                 
-                print(f"LiDAR Interference: Added {num_points_to_inject} phantom points from roof LiDAR sensor")
+                print(f"LiDAR Interference: Added {num_points_to_inject} phantom points from other sensor")
                 return result
         
         # If no interference was added, return the original cloud with flags            
@@ -110,8 +143,20 @@ class SensorCallbacks:
         
         # Apply interference from roof LiDAR (if available)
         if SensorCallbacks.last_roof_lidar_data is not None and len(data) > 0:
-            # Control interference level (could be made dynamic or configurable)
-            interference_level = 0.2  # 20% interference
+            # More realistic and variable interference
+            base_interference = 0.1
+            
+            # Time-varying interference pattern
+            if hasattr(SensorCallbacks, 'time_offset'):
+                SensorCallbacks.time_offset += 1
+            else:
+                SensorCallbacks.time_offset = 0
+            
+            # Occasionally increase interference (simulating passing reflective surfaces, etc)
+            time_factor = np.sin(SensorCallbacks.time_offset / 10.0) * 0.03  # Adds ±3% oscillation
+            
+            # Ensure interference stays positive and doesn't exceed reasonable limits
+            interference_level = max(0.01, min(0.15, base_interference + time_factor))
             
             # Apply simulated interference
             data = SensorCallbacks.simulate_lidar_interference(
