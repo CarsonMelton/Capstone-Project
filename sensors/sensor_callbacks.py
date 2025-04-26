@@ -17,14 +17,7 @@ class SensorCallbacks:
     def simulate_lidar_interference(point_cloud, other_sensor_data, config):
         """
         Simulate interference between LiDAR sensors by injecting points
-        
-        Args:
-            point_cloud: Primary sensor's point cloud data
-            other_sensor_data: Data from the other sensor that may cause interference
-            config: SimulationConfig instance with interference parameters
-            
-        Returns:
-            numpy.ndarray: Point cloud with simulated interference
+        Modified to place phantom points more strategically
         """
         if other_sensor_data is None or len(other_sensor_data) == 0:
             # Add phantom flag column (0 = real point)
@@ -42,7 +35,7 @@ class SensorCallbacks:
         
         # Select a percentage of points from the other sensor to inject as phantom readings
         if config.simulate_interference:
-            # Use parameters from config
+            # Use parameters from config (unchanged)
             base_rate = config.interference_base_rate
             probability_factor = config.interference_probability_factor
             
@@ -52,7 +45,7 @@ class SensorCallbacks:
             
             # Add randomness - some frames may have more interference than others
             # Occasional "burst" of interference
-            if np.random.random() < config.interference_burst_chance:  # Chance of a burst
+            if np.random.random() < config.interference_burst_chance:
                 num_points_to_inject = int(num_points_to_inject * config.interference_burst_multiplier)
                 print("Interference Burst!")
             
@@ -61,13 +54,27 @@ class SensorCallbacks:
                 indices = np.random.choice(len(other_sensor_data), min(num_points_to_inject, len(other_sensor_data)), replace=False)
                 phantom_points = other_sensor_data[indices]
                 
+                # Strategic phantom point placement in vehicle's path
+                for i in range(len(phantom_points)):
+                    # 70% chance to modify point to appear in vehicle's path
+                    if np.random.random() < 0.7:
+                        # Adjust y coordinate to be closer to the center line
+                        phantom_points[i, 1] = phantom_points[i, 1] * 0.3  # Reduce lateral offset
+                        
+                        # Adjust distance to be in a dangerous range (10-50 meters)
+                        distance = np.sqrt(phantom_points[i, 0]**2 + phantom_points[i, 1]**2)
+                        if distance > 50:
+                            scale_factor = np.random.uniform(10, 50) / distance
+                            phantom_points[i, 0] *= scale_factor
+                            phantom_points[i, 1] *= scale_factor
+                
                 # More realistic distortion model
                 # Points closer to sensor origin have less distortion
                 distances = np.sqrt(np.sum(phantom_points[:, :3]**2, axis=1))
                 distance_factor = np.minimum(distances / config.phantom_point_max_distance, 1.0)  # Normalize to 0-1 range, cap at 1
                 
-                # Apply variable distortion based on distance
-                distortion_scale = config.interference_distortion_base + (config.interference_distortion_range * distance_factor.reshape(-1, 1))
+                # Apply stronger distortion
+                distortion_scale = config.interference_distortion_base * 1.5 + (config.interference_distortion_range * distance_factor.reshape(-1, 1))
                 distortion = (np.random.random(phantom_points.shape) - 0.5) * distortion_scale
                 phantom_points = phantom_points + distortion
                 

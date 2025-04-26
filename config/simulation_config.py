@@ -50,13 +50,13 @@ class SimulationConfig:
         self.interference_base_level = 0.05  # Base percentage of interference applied
         self.interference_time_factor_amplitude = 0.02  # Controls the amplitude of time-varying oscillation
         
-        self.interference_base_rate = 0.1  # Percentage of points considered as candidates
-        self.interference_probability_factor = 0.1 # Fraction of candidate points that become phantom points
-        self.interference_burst_chance = 0.15  # Probability of a sudden "burst" of increased interference
+        self.interference_base_rate = 0.05  # Percentage of points considered as candidates
+        self.interference_probability_factor = 0.05 # Fraction of candidate points that become phantom points
+        self.interference_burst_chance = 0.0  # Probability of a sudden "burst" of increased interference
         self.interference_burst_multiplier = 4.0  # Multiplier for phantom points during a burst
         self.interference_distortion_base = 0.2  # Minimum distortion applied to phantom points
         self.interference_distortion_range = 0.6  # Additional distortion applied based on distance
-        self.interference_cluster_chance = 0.3  # Probability of grouping phantom points into clusters
+        self.interference_cluster_chance = 0.2  # Probability of grouping phantom points into clusters
         self.interference_blend_factor_min = 0.3  # Minimum blending for clustering phantom points
         self.interference_blend_factor_max = 0.7  # Maximum blending for clustering phantom points
         
