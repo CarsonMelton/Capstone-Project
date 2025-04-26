@@ -272,7 +272,6 @@ class CarlaSimulation:
         lidar_bp.set_attribute('rotation_frequency', str(self.config.lidar_frequency))
         lidar_bp.set_attribute('range', str(self.config.lidar_range))
         
-        # Set these if available in CARLA 10.0
         try:
             # Wider vertical FOV for roof LiDAR
             lidar_bp.set_attribute('upper_fov', str(self.config.lidar_upper_fov + 5.0))  # Increased upper FOV

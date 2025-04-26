@@ -47,11 +47,11 @@ class SimulationConfig:
         self.simulate_interference = True
         
 
-        self.interference_base_level = 0.15  # Base percentage of interference applied
-        self.interference_time_factor_amplitude = 0.03  # Controls the amplitude of time-varying oscillation
+        self.interference_base_level = 0.05  # Base percentage of interference applied
+        self.interference_time_factor_amplitude = 0.02  # Controls the amplitude of time-varying oscillation
         
         self.interference_base_rate = 0.1  # Percentage of points considered as candidates
-        self.interference_probability_factor = 0.3 # Fraction of candidate points that become phantom points
+        self.interference_probability_factor = 0.1 # Fraction of candidate points that become phantom points
         self.interference_burst_chance = 0.15  # Probability of a sudden "burst" of increased interference
         self.interference_burst_multiplier = 4.0  # Multiplier for phantom points during a burst
         self.interference_distortion_base = 0.2  # Minimum distortion applied to phantom points
@@ -65,16 +65,17 @@ class SimulationConfig:
         self.phantom_point_max_distance = 20.0  # Maximum distance for phantom points to appear
         self.interference_max_range_error = 15.0  # Maximum range measurement error due to interference
        
+       
+        # Original position reference points
+        self.original_x = 3.047784
+        self.original_y = 130.210068 + 1.524
+
         # Scene setup parameters (in meters, converted from feet)
         self.feet_to_meters = 0.3048
         self.pedestrian_distance = 100 * self.feet_to_meters
         self.car_right_offset = 5 * self.feet_to_meters
         self.car_setback = 300 * self.feet_to_meters
         self.pedestrian_distance_adjusted = 500 * self.feet_to_meters
-       
-        # Original position reference points
-        self.original_x = 3.047784
-        self.original_y = 130.210068 + 1.524
        
         # Features toggles
         self.enable_autonomous = True
