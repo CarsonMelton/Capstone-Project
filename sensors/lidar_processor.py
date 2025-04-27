@@ -85,7 +85,7 @@ class LidarProcessor:
         cluster_points = object_candidate_points[distances_to_closest < cluster_radius]
         
         # Require fewer points to detect an object
-        if len(cluster_points) < 2:  # Reduced from 3 to 2
+        if len(cluster_points) < 3:  # Increased for testing
             return {'object_detected': False, 'distance': float('inf')}
         
         # Return detection results
