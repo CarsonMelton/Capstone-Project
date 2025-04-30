@@ -1,24 +1,45 @@
 #!/usr/bin/env python
-"""File and directory management utilities for CARLA simulation"""
+"""
+File and Directory Management for CARLA Simulation
+================================================
+Utilities for managing simulation data directories and saving simulation results.
+"""
 
 import os
 import json
 import numpy as np
 from datetime import datetime
+from typing import List, Dict, Any, Optional, Union
+
 
 class FileManager:
-    """Handles directory creation and data saving"""
+    """
+    Handles directory creation and data storage for simulations
+    
+    This class provides static methods for creating simulation directories
+    and saving LiDAR data, detection results, and simulation summaries.
+    """
     
     @staticmethod
-    def create_simulation_directory():
-        """Create a new directory for this simulation run"""
-        # Create base directory for all simulation data
-        base_dir = "..\lidar_simulations"
+    def create_simulation_directory(base_dir: str = "..\lidar_simulations") -> str:
+        """
+        Create a new directory for this simulation run
+        
+        Args:
+            base_dir: Base directory for all simulation data
+            
+        Returns:
+            Path to the created simulation directory
+        """
+        # Create base directory if it doesn't exist
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
         
         # Find the next available simulation number
-        existing_dirs = [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d)) and d.startswith("Simulation ")]
+        existing_dirs = [
+            d for d in os.listdir(base_dir) 
+            if os.path.isdir(os.path.join(base_dir, d)) and d.startswith("Simulation ")
+        ]
         
         # Extract numbers from existing directories
         existing_numbers = []
@@ -38,12 +59,19 @@ class FileManager:
         sim_dir = os.path.join(base_dir, f"Simulation {next_num}")
         os.makedirs(sim_dir)
         
-        print(f"Created directory: {sim_dir}")
+        print(f"Created simulation directory: {sim_dir}")
         return sim_dir
     
     @staticmethod
-    def save_lidar_data(sim_dir, lidar_data_list, collision_detected=False, enable_autonomous=True, 
-                         frame_count=0, stopped_time=0, sensor_name="front"):
+    def save_lidar_data(
+        sim_dir: str,
+        lidar_data_list: List[Dict[str, Any]],
+        collision_detected: bool = False,
+        enable_autonomous: bool = True,
+        frame_count: int = 0,
+        stopped_time: float = 0,
+        sensor_name: str = "front"
+    ) -> None:
         """
         Save LiDAR data to the simulation directory
         
@@ -68,7 +96,11 @@ class FileManager:
         frames_dir = os.path.join(sensor_dir, "frames")
         os.makedirs(frames_dir, exist_ok=True)
         
-        # Prepare metadata (just for NPZ file, not for naming)
+        # Create clusters directory for saving detection cluster indices
+        clusters_dir = os.path.join(sensor_dir, "clusters")
+        os.makedirs(clusters_dir, exist_ok=True)
+        
+        # Prepare metadata
         timestamps = [str(item['timestamp']) for item in lidar_data_list]
         frames = [int(item['frame']) for item in lidar_data_list]
         times_since_start_ms = [item.get('time_since_start_ms', 0) for item in lidar_data_list]
@@ -95,7 +127,7 @@ class FileManager:
             times_since_start_ms=times_since_start_ms
         )
         
-        # Save detection summary separately as JSON for easier analysis (front LiDAR only)
+        # Save detection summary as JSON for easier analysis (front LiDAR only)
         if sensor_name == "front" and detections:
             detection_file = os.path.join(sensor_dir, "object_detections.json")
             with open(detection_file, 'w') as f:
@@ -111,40 +143,85 @@ class FileManager:
             
             # Save this individual frame's data
             np.save(frame_filename, item['data'])
+            
+            # If this frame has detection results with cluster indices, save them separately
+            if (sensor_name == "front" and 'detection_results' in item and 
+                    item['detection_results'].get('object_detected', False)):
+                if 'cluster_indices' in item['detection_results']:
+                    # Save cluster indices to a separate JSON file
+                    cluster_indices = item['detection_results']['cluster_indices']
+                    cluster_filename = os.path.join(clusters_dir, f"{sim_time_ms:08d}.json")
+                    
+                    try:
+                        with open(cluster_filename, 'w') as f:
+                            json.dump({'cluster_indices': cluster_indices}, f)
+                    except Exception as e:
+                        print(f"Error saving cluster indices: {e}")
         
-        # Generate result summary file (for the first sensor only to avoid duplication)
+        # Generate result summary file (for the front sensor only to avoid duplication)
         if sensor_name == "front":
-            summary_file = os.path.join(sim_dir, "summary.txt")
-            with open(summary_file, 'w') as f:
-                f.write(f"Simulation Summary\n")
-                f.write(f"=================\n\n")
-                f.write(f"Date: {datetime.now()}\n")
-                f.write(f"Total frames: {frame_count}\n")
-                f.write(f"Total front LiDAR scans: {len(lidar_data_list)}\n")
-                
-                # Check if roof data is available and add to summary
-                roof_dir = os.path.join(sim_dir, "roof_lidar")
-                if os.path.exists(roof_dir):
-                    roof_frames = os.path.join(roof_dir, "frames")
-                    if os.path.exists(roof_frames):
-                        roof_scan_count = len([f for f in os.listdir(roof_frames) if f.endswith('.npy')])
-                        f.write(f"Total roof LiDAR scans: {roof_scan_count}\n")
-                
-                f.write(f"Autonomous mode: {enable_autonomous}\n")
-                f.write(f"Collision detected: {collision_detected}\n")
-                
-                if collision_detected:
-                    f.write(f"OUTCOME: Collision occurred with pedestrian\n")
-                else:
-                    if stopped_time >= 1.0:
-                        f.write(f"OUTCOME: Vehicle successfully stopped before pedestrian\n")
-                        f.write(f"Autonomous braking system prevented collision\n")
-                    else:
-                        f.write(f"OUTCOME: No collision detected with pedestrian\n")
+            FileManager._create_summary_file(
+                sim_dir, 
+                frame_count, 
+                len(lidar_data_list),
+                collision_detected,
+                enable_autonomous,
+                stopped_time
+            )
         
         print(f"Saved {len(lidar_data_list)} {sensor_name} LiDAR frames:")
         print(f"- Metadata saved to: {metadata_file}")
         print(f"- Frame data saved to: {frames_dir}")
         if sensor_name == "front" and detections:
             print(f"- Detection data saved to: {detection_file}")
-            print(f"- Summary saved to: {summary_file}")
+            print(f"- Cluster data saved to: {clusters_dir}")
+    
+    @staticmethod
+    def _create_summary_file(
+        sim_dir: str, 
+        frame_count: int, 
+        lidar_scan_count: int,
+        collision_detected: bool,
+        enable_autonomous: bool,
+        stopped_time: float
+    ) -> None:
+        """
+        Create a summary file for the simulation
+        
+        Args:
+            sim_dir: Directory to save data to
+            frame_count: Total number of simulation frames
+            lidar_scan_count: Number of LiDAR scans
+            collision_detected: Whether a collision was detected
+            enable_autonomous: Whether autonomous mode was enabled
+            stopped_time: Time vehicle was stopped
+        """
+        summary_file = os.path.join(sim_dir, "summary.txt")
+        with open(summary_file, 'w') as f:
+            f.write(f"Simulation Summary\n")
+            f.write(f"=================\n\n")
+            f.write(f"Date: {datetime.now()}\n")
+            f.write(f"Total frames: {frame_count}\n")
+            f.write(f"Total front LiDAR scans: {lidar_scan_count}\n")
+            
+            # Check if roof data is available and add to summary
+            roof_dir = os.path.join(sim_dir, "roof_lidar")
+            if os.path.exists(roof_dir):
+                roof_frames = os.path.join(roof_dir, "frames")
+                if os.path.exists(roof_frames):
+                    roof_scan_count = len([f for f in os.listdir(roof_frames) if f.endswith('.npy')])
+                    f.write(f"Total roof LiDAR scans: {roof_scan_count}\n")
+            
+            f.write(f"Autonomous mode: {enable_autonomous}\n")
+            f.write(f"Collision detected: {collision_detected}\n")
+            
+            if collision_detected:
+                f.write(f"OUTCOME: Collision occurred with pedestrian\n")
+            else:
+                if stopped_time >= 1.0:
+                    f.write(f"OUTCOME: Vehicle successfully stopped before pedestrian\n")
+                    f.write(f"Autonomous braking system prevented collision\n")
+                else:
+                    f.write(f"OUTCOME: No collision detected with pedestrian\n")
+        
+        print(f"- Summary saved to: {summary_file}")

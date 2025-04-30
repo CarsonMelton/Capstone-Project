@@ -11,7 +11,7 @@ class LidarProcessor:
     def process_point_cloud(point_cloud):
         """
         Process point cloud to find potential objects ahead in the vehicle's path
-        Modified to be more sensitive to phantom points
+        Modified to track and return indices of points in detection cluster
         """
         # Extract XYZ data from points [x, y, z, intensity] or [x, y, z, intensity, phantom_flag]
         if point_cloud.shape[1] >= 4:
@@ -23,6 +23,7 @@ class LidarProcessor:
         # Filter points to focus on a broader area ahead
         forward_mask = xyz[:, 0] > -1.0  # More permissive - include some points to the sides/rear
         forward_points = xyz[forward_mask]
+        forward_indices = np.where(forward_mask)[0]  # Track indices
         
         if len(forward_points) == 0:
             print("No forward points detected")
@@ -31,11 +32,13 @@ class LidarProcessor:
         # Use more permissive height filtering for objects (between 0.0m and 3.0m height)
         height_mask = (forward_points[:, 2] > 0.2) & (forward_points[:, 2] < 3.0)  # Keeping original height range
         object_candidate_points = forward_points[height_mask]
+        object_candidate_indices = forward_indices[height_mask]  # Track indices
         
         # Add additional filter: use a much wider corridor for detection
         # This helps include objects that are to the sides
         wide_corridor_mask = np.abs(object_candidate_points[:, 1]) < 5.0  # Increased from 2.0 to 5.0 to widen corridor
         object_candidate_points = object_candidate_points[wide_corridor_mask]
+        object_candidate_indices = object_candidate_indices[wide_corridor_mask]  # Track indices
         
         if len(object_candidate_points) == 0:
             print("No candidate points detected")
@@ -66,7 +69,9 @@ class LidarProcessor:
                 # Look for clusters of points (improved object detection)
                 cluster_radius = 0.5  # meters, reduced radius for more precision
                 distances_to_closest = np.sqrt(np.sum((object_candidate_points - closest_point)**2, axis=1))
-                cluster_points = object_candidate_points[distances_to_closest < cluster_radius]
+                cluster_mask = distances_to_closest < cluster_radius
+                cluster_points = object_candidate_points[cluster_mask]
+                cluster_indices = object_candidate_indices[cluster_mask]  # Track indices
                 
                 # Require more points (5) for early detections to filter out phantom points
                 if len(cluster_points) < 5:
@@ -82,17 +87,20 @@ class LidarProcessor:
         # Look for clusters of points with fewer required points
         cluster_radius = 1.0 
         distances_to_closest = np.sqrt(np.sum((object_candidate_points - closest_point)**2, axis=1))
-        cluster_points = object_candidate_points[distances_to_closest < cluster_radius]
+        cluster_mask = distances_to_closest < cluster_radius
+        cluster_points = object_candidate_points[cluster_mask]
+        cluster_indices = object_candidate_indices[cluster_mask]  # Track indices
         
         # Require fewer points to detect an object
         if len(cluster_points) < 3:  # Increased for testing
             return {'object_detected': False, 'distance': float('inf')}
         
-        # Return detection results
+        # Return detection results with cluster indices
         return {
             'object_detected': True,
             'distance': min_distance,
             'location': closest_point,
             'point_count': len(cluster_points),
-            'cluster_points': cluster_points
+            'cluster_points': cluster_points,
+            'cluster_indices': cluster_indices.tolist()  # Convert to list for easier serialization
         }
