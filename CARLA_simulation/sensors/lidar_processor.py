@@ -7,6 +7,10 @@ import time
 class LidarProcessor:
     """Processes LiDAR point clouds for object detection"""
     
+    # Class variables for tracking time
+    startup_time = time.time()
+    vehicle_moving_time = 0
+    
     @staticmethod
     def process_point_cloud(point_cloud):
         """

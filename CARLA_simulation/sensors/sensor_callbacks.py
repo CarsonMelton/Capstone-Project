@@ -4,8 +4,8 @@
 import numpy as np
 import time
 from datetime import datetime
-from sensors.lidar_processor import LidarProcessor
-from control.autonomous_controller import AutonomousController
+from CARLA_simulation.sensors.lidar_processor import LidarProcessor
+from CARLA_simulation.control.autonomous_controller import AutonomousController
 
 class SensorCallbacks:
     """Handles sensor callbacks and data processing"""
