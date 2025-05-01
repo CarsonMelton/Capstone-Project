@@ -33,11 +33,10 @@ The simulation can generate phantom points (false readings) in LiDAR data to tes
 
 ## Requirements
 
-- CARLA Simulator (tested with version 0.9.x)
+- CARLA Simulator (tested with version 0.10.0)
 - Python 3.7+
 - NumPy
 - Open3D (for visualization)
-- Additional Python libraries (listed in requirements.txt)
 
 ## Usage Instructions
 
@@ -79,8 +78,8 @@ python scripts/run_visualization.py --dir="Simulation 1"
 
 ### Color Coding
 
-- **BLUE**: Normal LiDAR points (intensity modulated)
-- **RED**: Phantom points (explicitly tagged phantom points)
+- **BLUE**: Normal LiDAR points
+- **RED**: Phantom points
 - **GREEN**: Detection cluster points (points that triggered object detection)
 
 ## Simulation Features
