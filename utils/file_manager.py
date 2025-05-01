@@ -21,7 +21,7 @@ class FileManager:
     """
     
     @staticmethod
-    def create_simulation_directory(base_dir: str = "..\lidar_simulations") -> str:
+    def create_simulation_directory(base_dir: str = "simulation_data") -> str:
         """
         Create a new directory for this simulation run
         

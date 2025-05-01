@@ -51,10 +51,8 @@ class SimulationConfig:
         self.interference_time_factor_amplitude = 0.02  # Controls the amplitude of time-varying oscillation
         
         # Reduced rates for more occasional interference
-        self.interference_base_rate = 0.05  # Reduced from 0.15 back to original 0.05
-        self.interference_probability_factor = 0.05  # Reduced from 0.15 back to original 0.05
-        self.interference_burst_chance = 0.00
-        self.interference_burst_multiplier = 3.0  # Reduced from 4.0 to 3.0
+        self.interference_base_rate = 0.05  # Percentage of points to consider
+        self.interference_probability_factor = 0.05  # Probability factor for actual injection
         
         # Keep distortion parameters the same
         self.interference_distortion_base = 0.2

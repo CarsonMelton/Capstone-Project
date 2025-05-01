@@ -76,12 +76,6 @@ class SensorCallbacks:
             candidates = int(len(other_sensor_data) * base_rate)
             num_points_to_inject = int(candidates * probability_factor)
             
-            # Add randomness - some frames may have more interference than others
-            # Occasional "burst" of interference
-            if np.random.random() < config.interference_burst_chance:
-                num_points_to_inject = int(num_points_to_inject * config.interference_burst_multiplier)
-                print("Interference Burst!")
-            
             if num_points_to_inject > 0 and len(other_sensor_data) > 0:
                 # Randomly select points from other sensor
                 indices = np.random.choice(len(other_sensor_data), min(num_points_to_inject, len(other_sensor_data)), replace=False)
