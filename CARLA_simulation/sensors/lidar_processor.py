@@ -60,7 +60,7 @@ class LidarProcessor:
         closest_point = object_candidate_points[min_distance_idx]
         
         # Minimum distance check - maintain original logic
-        if min_distance < 3.0:  # Minimum 3 meters for valid detection
+        if min_distance < 4.0:  # Minimum 3 meters for valid detection
             vehicle_moving_time = getattr(LidarProcessor, 'vehicle_moving_time', 0)
             current_time = time.time()
             
