@@ -1,9 +1,0 @@
-Simulation Summary
-=================
-
-Date: 2025-05-01 11:01:15.920491
-Total frames: 214
-Total front LiDAR scans: 221
-Autonomous mode: True
-Collision detected: False
-OUTCOME: No collision detected with pedestrian
