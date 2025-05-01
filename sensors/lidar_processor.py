@@ -65,7 +65,7 @@ class LidarProcessor:
                 LidarProcessor.vehicle_moving_time = 0
             
             # If less than 5 seconds since startup, require more points for close object detection
-            if current_time - LidarProcessor.startup_time < 5.0:
+            if current_time - LidarProcessor.startup_time < 3.0:
                 # Look for clusters of points (improved object detection)
                 cluster_radius = 0.5  # meters, reduced radius for more precision
                 distances_to_closest = np.sqrt(np.sum((object_candidate_points - closest_point)**2, axis=1))
@@ -85,14 +85,14 @@ class LidarProcessor:
             return {'object_detected': False, 'distance': float('inf')}
         
         # Look for clusters of points with fewer required points
-        cluster_radius = 1.0 
+        cluster_radius = 0.8  # Reduced from 1.0 to favor tighter clusters
         distances_to_closest = np.sqrt(np.sum((object_candidate_points - closest_point)**2, axis=1))
         cluster_mask = distances_to_closest < cluster_radius
         cluster_points = object_candidate_points[cluster_mask]
         cluster_indices = object_candidate_indices[cluster_mask]  # Track indices
         
         # Require fewer points to detect an object
-        if len(cluster_points) < 3:  # Increased for testing
+        if len(cluster_points) < 2:  # Reduced from 3 to 2
             return {'object_detected': False, 'distance': float('inf')}
         
         # Return detection results with cluster indices

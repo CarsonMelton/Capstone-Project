@@ -2,6 +2,7 @@
 """Sensor callback functions for CARLA simulation"""
 
 import numpy as np
+import time
 from datetime import datetime
 from sensors.lidar_processor import LidarProcessor
 from control.autonomous_controller import AutonomousController
@@ -13,11 +14,34 @@ class SensorCallbacks:
     last_roof_lidar_data = None
     last_front_lidar_data = None
     
+    # Keep track of focused cluster creation to avoid creating them too frequently
+    last_focused_cluster_time = 0
+    focused_cluster_cooldown = 5.0  # Seconds between focused clusters
+    
+    @staticmethod
+    def create_focused_phantom_cluster(base_point, num_points=10, radius=0.5):
+        """Create a tight cluster of phantom points around a base point"""
+        cluster_points = []
+        for _ in range(num_points):
+            # Random offset within radius (only for XYZ coordinates)
+            offset = np.random.normal(0, radius/2, 3)  # Tighter distribution for 3D coordinates
+            
+            # Create new point with same shape as base_point
+            new_point = np.zeros_like(base_point)
+            new_point[:3] = base_point[:3] + offset  # Apply offset only to XYZ coordinates
+            
+            # Copy intensity (and any other values beyond XYZ)
+            if len(base_point) > 3:
+                new_point[3:] = base_point[3:]
+                
+            cluster_points.append(new_point)
+        return np.array(cluster_points)
+    
     @staticmethod
     def simulate_lidar_interference(point_cloud, other_sensor_data, config):
         """
         Simulate interference between LiDAR sensors by injecting points
-        Modified to place phantom points more strategically
+        Modified to place phantom points more strategically but less frequently
         """
         if other_sensor_data is None or len(other_sensor_data) == 0:
             # Add phantom flag column (0 = real point)
@@ -33,9 +57,18 @@ class SensorCallbacks:
         # Combine original points with flags
         modified_cloud_with_flags = np.hstack([modified_cloud, phantom_flags_original])
         
+        # Implement occasional skipping to reduce overall phantom frequency
+        # Only generate phantoms 20% of the time, skip 80% of frames
+        if np.random.random() > 0.2 and not hasattr(SensorCallbacks, 'force_phantom_generation'):
+            return modified_cloud_with_flags
+            
+        # Reset the force flag if it was set
+        if hasattr(SensorCallbacks, 'force_phantom_generation'):
+            delattr(SensorCallbacks, 'force_phantom_generation')
+        
         # Select a percentage of points from the other sensor to inject as phantom readings
         if config.simulate_interference:
-            # Use parameters from config (unchanged)
+            # Use parameters from config
             base_rate = config.interference_base_rate
             probability_factor = config.interference_probability_factor
             
@@ -56,17 +89,56 @@ class SensorCallbacks:
                 
                 # Strategic phantom point placement in vehicle's path
                 for i in range(len(phantom_points)):
-                    # 70% chance to modify point to appear in vehicle's path
-                    if np.random.random() < 0.7:
-                        # Adjust y coordinate to be closer to the center line
-                        phantom_points[i, 1] = phantom_points[i, 1] * 0.3  # Reduce lateral offset
+                    # 90% chance to modify point to appear in vehicle's path
+                    if np.random.random() < 0.90:
+                        # Adjust y coordinate to be VERY close to the center line
+                        phantom_points[i, 1] = phantom_points[i, 1] * 0.2 # Reduce lateral offset even more
                         
-                        # Adjust distance to be in a dangerous range (10-50 meters)
+                        # Adjust height to be in detection range (0.3m to 2.0m)
+                        phantom_points[i, 2] = np.random.uniform(0.3, 2.0)
+                        
+                        # Adjust distance to be in critical detection range (15-40 meters)
+                        # This is a key range for emergency braking
                         distance = np.sqrt(phantom_points[i, 0]**2 + phantom_points[i, 1]**2)
-                        if distance > 50:
-                            scale_factor = np.random.uniform(10, 50) / distance
+                        if distance < 15 or distance > 40:
+                            target_distance = np.random.uniform(20, 45)
+                            scale_factor = target_distance / max(0.1, distance)
                             phantom_points[i, 0] *= scale_factor
                             phantom_points[i, 1] *= scale_factor
+                
+                # Create focused phantom clusters to ensure detection - but less often
+                current_time = time.time()
+                time_since_last_cluster = current_time - getattr(SensorCallbacks, 'last_focused_cluster_time', 0)
+                
+                if (num_points_to_inject >= 5 and 
+                    np.random.random() < 0.15 and
+                    time_since_last_cluster > SensorCallbacks.focused_cluster_cooldown):
+                    
+                    # Define an ideal base point (directly in front, good height, good distance)
+                    ideal_distance = np.random.uniform(20, 35)  # Critical detection zone
+                    base_point = np.array([ideal_distance, 0.0, 1.0, 1.0])  # x, y, z, intensity
+                    
+                    # Create a cluster of points around this base point
+                    focused_cluster = SensorCallbacks.create_focused_phantom_cluster(
+                        base_point, 
+                        num_points=min(10, num_points_to_inject // 3),
+                        radius=0.4  # Tight radius to ensure detection
+                    )
+                    
+                    # Replace some phantom points with our focused cluster
+                    if len(focused_cluster) > 0:
+                        phantom_points[:len(focused_cluster)] = focused_cluster
+                        print(f"Created focused phantom cluster with {len(focused_cluster)} points at {ideal_distance:.1f}m")
+                        
+                        # Update the last cluster time
+                        SensorCallbacks.last_focused_cluster_time = current_time
+                        
+                        # Force phantom generation after a cooldown (to ensure we get some phantom points soon)
+                        def schedule_phantom_generation():
+                            SensorCallbacks.force_phantom_generation = True
+                        
+                        # Schedule phantom generation for next frame
+                        schedule_phantom_generation()
                 
                 # More realistic distortion model
                 # Points closer to sensor origin have less distortion
@@ -146,7 +218,7 @@ class SensorCallbacks:
                 print(f"Alternative processing also failed: {e2}")
                 data = np.array([])  # Empty array as fallback
         
-        # Store this reading for reference (not used for interference since we're only applying one-way interference)
+        # Store this reading for reference
         SensorCallbacks.last_front_lidar_data = data.copy() if len(data) > 0 else None
         
         # Apply interference from roof LiDAR (if available)

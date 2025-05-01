@@ -54,13 +54,13 @@ class AutonomousController:
                 ttc = effective_distance / speed_ms
             
             # Braking thresholds - react to any object in the path
-            # Start considering braking earlier at higher speeds
-            early_detection_distance = min(80.0, max(40.0, speed_ms * 5.0))  # Dynamic detection range
+            # Start considering braking earlier at higher speeds - INCREASED range
+            early_detection_distance = min(100.0, max(50.0, speed_ms * 6.0))  # Increased detection range
             
             if distance < early_detection_distance:
                 # Special case for direct path objects - with more permissive threshold
                 # If object has reasonable lateral offset, apply stronger braking earlier
-                if lateral_offset < 4.0 and distance < 60.0:
+                if lateral_offset < 3 and distance < 60.0:
                     direct_path_intensity = max(0.6, min(1.0, (60.0 - distance) / 40.0 + 0.2))
                     if direct_path_intensity > brake_intensity:
                         brake_intensity = direct_path_intensity
@@ -98,7 +98,8 @@ class AutonomousController:
                 elif distance < 55.0 and not emergency_brake:
                     # Reduce braking intensity for objects with high lateral offset
                     # But be more conservative - allow for more braking even with higher offsets
-                    lateral_factor = max(0.5, 1.0 - (lateral_offset / 15.0))
+                    # Make lateral_factor more permissive to allow braking for points with higher offset
+                    lateral_factor = max(0.7, 1.0 - (lateral_offset / 20.0))  # More permissive (0.7 minimum)
                     
                     # Only brake if object is somewhat in front (lateral_factor > 0)
                     if lateral_factor > 0:

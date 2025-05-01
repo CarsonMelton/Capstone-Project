@@ -46,24 +46,30 @@ class SimulationConfig:
         # Interference simulation - Master switches
         self.simulate_interference = True
         
-
+        # BALANCED PARAMETERS FOR MORE REALISTIC INTERFERENCE
         self.interference_base_level = 0.05  # Base percentage of interference applied
         self.interference_time_factor_amplitude = 0.02  # Controls the amplitude of time-varying oscillation
         
-        self.interference_base_rate = 0.05  # Percentage of points considered as candidates
-        self.interference_probability_factor = 0.05 # Fraction of candidate points that become phantom points
-        self.interference_burst_chance = 0.0  # Probability of a sudden "burst" of increased interference
-        self.interference_burst_multiplier = 4.0  # Multiplier for phantom points during a burst
-        self.interference_distortion_base = 0.2  # Minimum distortion applied to phantom points
-        self.interference_distortion_range = 0.6  # Additional distortion applied based on distance
-        self.interference_cluster_chance = 0.2  # Probability of grouping phantom points into clusters
-        self.interference_blend_factor_min = 0.3  # Minimum blending for clustering phantom points
-        self.interference_blend_factor_max = 0.7  # Maximum blending for clustering phantom points
+        # Reduced rates for more occasional interference
+        self.interference_base_rate = 0.05  # Reduced from 0.15 back to original 0.05
+        self.interference_probability_factor = 0.05  # Reduced from 0.15 back to original 0.05
+        self.interference_burst_chance = 0.00
+        self.interference_burst_multiplier = 3.0  # Reduced from 4.0 to 3.0
         
-        self.direct_interference_probability = 0.01  # Controls probability of direct interference
-        self.scattered_interference_probability = 0.002  # Controls probability of scattered interference
-        self.phantom_point_max_distance = 20.0  # Maximum distance for phantom points to appear
-        self.interference_max_range_error = 15.0  # Maximum range measurement error due to interference
+        # Keep distortion parameters the same
+        self.interference_distortion_base = 0.2
+        self.interference_distortion_range = 0.6
+        
+        # Keep clustering parameters high to ensure realistic clusters when they do occur
+        self.interference_cluster_chance = 0.5  # Keep high to form realistic clusters
+        self.interference_blend_factor_min = 0.5
+        self.interference_blend_factor_max = 0.8
+        
+        # Other interference parameters
+        self.direct_interference_probability = 0.01
+        self.scattered_interference_probability = 0.002
+        self.phantom_point_max_distance = 60.0
+        self.interference_max_range_error = 15.0
        
        
         # Original position reference points
@@ -73,7 +79,7 @@ class SimulationConfig:
         # Scene setup parameters (in meters, converted from feet)
         self.feet_to_meters = 0.3048
         self.pedestrian_distance = 100 * self.feet_to_meters
-        self.car_right_offset = 5 * self.feet_to_meters
+        self.car_right_offset = 10 * self.feet_to_meters
         self.car_setback = 300 * self.feet_to_meters
         self.pedestrian_distance_adjusted = 500 * self.feet_to_meters
        
