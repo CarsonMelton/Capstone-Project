@@ -25,7 +25,7 @@ class LidarProcessor:
         
         # Get points in a wider cone in front of the vehicle (forward-facing points)
         # Filter points to focus on a broader area ahead
-        forward_mask = xyz[:, 0] > -1.0  # More permissive - include some points to the sides/rear
+        forward_mask = xyz[:, 0] >= 0.0
         forward_points = xyz[forward_mask]
         forward_indices = np.where(forward_mask)[0]  # Track indices
         
@@ -33,14 +33,13 @@ class LidarProcessor:
             print("No forward points detected")
             return {'object_detected': False, 'distance': float('inf')}
         
-        # Use more permissive height filtering for objects (between 0.0m and 3.0m height)
-        height_mask = (forward_points[:, 2] > 0.2) & (forward_points[:, 2] < 3.0)  # Keeping original height range
+        # Set height filtering for objects (between 0.0m and 3.0m height)
+        height_mask = (forward_points[:, 2] > 0.2) & (forward_points[:, 2] < 3.0)
         object_candidate_points = forward_points[height_mask]
         object_candidate_indices = forward_indices[height_mask]  # Track indices
         
-        # Add additional filter: use a much wider corridor for detection
-        # This helps include objects that are to the sides
-        wide_corridor_mask = np.abs(object_candidate_points[:, 1]) < 5.0  # Increased from 2.0 to 5.0 to widen corridor
+        # Set width of detection corridor
+        wide_corridor_mask = np.abs(object_candidate_points[:, 1]) < 5.0
         object_candidate_points = object_candidate_points[wide_corridor_mask]
         object_candidate_indices = object_candidate_indices[wide_corridor_mask]  # Track indices
         
@@ -81,22 +80,22 @@ class LidarProcessor:
                 if len(cluster_points) < 5:
                     return {'object_detected': False, 'distance': float('inf')}
         
-        # Check if point is within a much wider corridor in front
-        lateral_limit = 5.0  # Increased from 3.0 to 5.0
+        # Check if point is within corridor
+        lateral_limit = 4.0
         
         if abs(closest_point[1]) > lateral_limit:
             print(f"Point rejected due to Y-deviation: {abs(closest_point[1]):.2f}m > {lateral_limit}m")
             return {'object_detected': False, 'distance': float('inf')}
         
         # Look for clusters of points with fewer required points
-        cluster_radius = 0.8  # Reduced from 1.0 to favor tighter clusters
+        cluster_radius = 0.8  
         distances_to_closest = np.sqrt(np.sum((object_candidate_points - closest_point)**2, axis=1))
         cluster_mask = distances_to_closest < cluster_radius
         cluster_points = object_candidate_points[cluster_mask]
         cluster_indices = object_candidate_indices[cluster_mask]  # Track indices
         
         # Require fewer points to detect an object
-        if len(cluster_points) < 2:  # Reduced from 3 to 2
+        if len(cluster_points) < 2:
             return {'object_detected': False, 'distance': float('inf')}
         
         # Return detection results with cluster indices
