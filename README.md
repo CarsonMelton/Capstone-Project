@@ -14,14 +14,14 @@ The simulation can generate phantom points (false readings) in LiDAR data to tes
 
 ## Dependency Requirements
 
-| Dependency | Minimum Version | Purpose |
-|------------|-----------------|---------|
-| Python | 3.7+ | Base programming language |
-| CARLA Simulator | 0.10.0 | Autonomous driving simulation platform |
-| NumPy | 1.19.0 | Numerical computing and array operations |
-| Open3D | 0.13.0 | 3D visualization library |
-| SciPy | 1.6.0 | Scientific computing and point cloud processing |
-| Matplotlib | 3.3.0 | Data analysis and visualization |
+| Dependency | Minimum Version |
+|------------|-----------------|
+| Python | 3.7+ |
+| CARLA Simulator | 0.10.0 |
+| NumPy | 1.19.0 |
+| Open3D | 0.13.0 |
+| SciPy | 1.6.0 |
+| Matplotlib | 3.3.0 
 
 ## Repository Structure
 
@@ -163,5 +163,3 @@ Simulation results are stored in the `../simulation_data/` directory, organized 
 - Detection results (JSON format)
 - Simulation summary (text file)
 - Separate data for each LiDAR sensor (front and roof)
-
-For custom analysis, the data can be loaded and processed using the utilities in `visualization/file_utils.py`.
