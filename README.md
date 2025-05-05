@@ -12,15 +12,32 @@ This project uses the CARLA simulator to create realistic LiDAR point cloud data
 
 The simulation can generate phantom points (false readings) in LiDAR data to test detection robustness. The visualization component allows for easy playback and analysis of simulation results.
 
+## Dependency Requirements
+
+| Dependency | Minimum Version | Purpose |
+|------------|-----------------|---------|
+| Python | 3.7+ | Base programming language |
+| CARLA Simulator | 0.10.0 | Autonomous driving simulation platform |
+| NumPy | 1.19.0 | Numerical computing and array operations |
+| Open3D | 0.13.0 | 3D visualization library |
+| SciPy | 1.6.0 | Scientific computing and point cloud processing |
+| Matplotlib | 3.3.0 | Data analysis and visualization |
+
 ## Repository Structure
 
 ```
 ├── CARLA_simulation/         # Simulation-related code
 │   ├── config/               # Configuration parameters
+│   │   └── simulation_config.py  # Simulation parameter settings
 │   ├── control/              # Autonomous control logic
+│   │   └── autonomous_controller.py  # Braking and control systems
 │   ├── sensors/              # LiDAR and sensor processing
+│   │   ├── lidar_processor.py    # Point cloud processing algorithms
+│   │   └── sensor_callbacks.py   # Sensor data callback handlers
 │   ├── simulation/           # Main simulation components
+│   │   └── carla_simulation.py   # Main simulation manager
 │   └── utils/                # Utility functions
+│       └── file_manager.py   # Data storage and organization
 ├── visualization/            # Visualization code
 │   ├── file_utils.py         # File handling utilities
 │   ├── point_cloud_processor.py  # Point cloud processing
@@ -31,19 +48,40 @@ The simulation can generate phantom points (false readings) in LiDAR data to tes
     └── run_visualization.py  # Script to visualize results
 ```
 
-## Requirements
+## Installation Guide
 
-- CARLA Simulator (tested with version 0.10.0)
-- Python 3.7+
-- NumPy
-- Open3D (for visualization)
+### CARLA Installation
+
+For installing CARLA 0.10.0, please refer to the official installation and setup instructions at:
+[https://carla.org/2024/12/19/release-0.10.0/](https://carla.org/2024/12/19/release-0.10.0/)
+
+The official guide provides detailed instructions for different platforms and configurations.
+
+### Project Setup
+
+Clone the repository and navigate to the project directory:
+```bash
+git clone https://github.com/CarsonMelton/Capstone-Project.git
+cd Capstone-Project
+```
 
 ## Usage Instructions
 
 ### Running a Simulation
 
-To run a simulation with default parameters:
+1. Start the CARLA server first:
+```bash
+# Navigate to your CARLA directory
+cd /path/to/carla
 
+# Start CARLA (Linux)
+./CarlaUE4.sh -quality-level=Low
+
+# Or on Windows
+# CarlaUE4.exe -quality-level=Low
+```
+
+2. In a different window, run the simulation with default parameters:
 ```bash
 python scripts/run_simulation.py
 ```
@@ -78,7 +116,7 @@ python scripts/run_visualization.py --dir="Simulation 1"
 
 ### Color Coding
 
-- **BLUE**: Normal LiDAR points
+- **BLUE**: Normal LiDAR points (intensity modulated)
 - **RED**: Phantom points
 - **GREEN**: Detection cluster points (points that triggered object detection)
 
@@ -88,11 +126,42 @@ python scripts/run_visualization.py --dir="Simulation 1"
 - Configurable phantom point generation
 - Realistic object detection
 - Autonomous braking capabilities
+- Real-time visualization of point clouds
+- Detection of false-positive and false-negative results
+
+## Simulation Configuration
+
+Key configuration parameters in `CARLA_simulation/config/simulation_config.py` include:
+
+```python
+# Simulation parameters
+self.sync_mode = True
+self.delta_seconds = 0.05  # Simulation step size
+self.max_simulation_time = 120  # Max simulation duration (seconds)
+
+# Vehicle parameters
+self.vehicle_type = 'vehicle.dodge.charger'
+self.vehicle_mass = 1800.0  # kg
+self.throttle_value = 0.4  # Vehicle throttle (0-1)
+
+# LiDAR parameters
+self.lidar_channels = 64  # Number of vertical channels
+self.lidar_points_per_second = 500000
+self.lidar_frequency = 20  # Hz
+self.lidar_range = 100  # meters
+
+# Interference simulation
+self.simulate_interference = True  # Master toggle
+self.interference_base_level = 0.05  # Base interference percentage
+```
 
 ## Simulation Output
 
 Simulation results are stored in the `../simulation_data/` directory, organized by simulation number. Each simulation directory contains:
 
-- Point cloud data for each LiDAR sensor
-- Detection results
-- Simulation summary
+- Point cloud data for each LiDAR sensor (stored as NumPy .npy files)
+- Detection results (JSON format)
+- Simulation summary (text file)
+- Separate data for each LiDAR sensor (front and roof)
+
+For custom analysis, the data can be loaded and processed using the utilities in `visualization/file_utils.py`.
