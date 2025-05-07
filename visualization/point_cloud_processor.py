@@ -54,11 +54,10 @@ def preprocess_points(
         print(f"Warning: Point cloud needs at least 3 dimensions (x,y,z), but has {points_reshaped.shape[1]}")
         return None if not original_indices else (None, None)
     
-    # Flip the Y coordinates to correct left/right orientation
     # LiDAR's coordinate system: Y+ is right, visualization wants Y+ as left
     points_reshaped[:, 1] = -points_reshaped[:, 1]
     
-    # Filter out points behind the car if requested
+    # Filter out points behind the car
     # In LiDAR coordinates, x is forward, so we keep points with x > 0
     if filter_behind and len(points_reshaped) > 0:
         forward_mask = points_reshaped[:, 0] > 0
@@ -154,10 +153,6 @@ def find_points_by_coordinates(
         
         return list(set(matching_indices))  # Remove duplicates
 
-
-# Removed the unused detect_phantom_points function
-
-
 def create_open3d_point_cloud(
     points: np.ndarray, 
     phantom_indices: Optional[List[int]] = None, 
@@ -188,7 +183,7 @@ def create_open3d_point_cloud(
         phantom_flags = points[:, 4].astype(bool)
         actual_phantom_indices = np.where(phantom_flags)[0]
         
-        # Use the actual phantom indices instead of detected ones
+        # Use the actual phantom indices
         if len(actual_phantom_indices) > 0:
             phantom_indices = actual_phantom_indices
             print(f"Using {len(phantom_indices)} tagged phantom points from simulation")
@@ -222,7 +217,7 @@ def create_open3d_point_cloud(
         if valid_phantom_indices:
             colors[valid_phantom_indices] = COLOR_PHANTOM
     
-    # Highlight cluster points if provided (detection cluster takes precedence over phantom points)
+    # Highlight cluster points if provided
     if cluster_indices is not None and len(cluster_indices) > 0:
         # Ensure indices are within bounds
         valid_cluster_indices = [idx for idx in cluster_indices if idx < len(points)]
@@ -272,7 +267,6 @@ def apply_custom_view(vis: o3d.visualization.Visualizer) -> None:
         vis: Open3D visualizer object
     """
     view_control = vis.get_view_control()
-    # Position behind and slightly above, car moving away from camera
     view_control.set_front([-0.8, 0, 0.6])   # Camera direction vector
     view_control.set_up([0, 0, 1])           # Up vector (Z is up)
     view_control.set_lookat([5, 0, 0])       # Look-at point (focus on area ahead)

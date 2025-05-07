@@ -85,22 +85,21 @@ class SensorCallbacks:
                 for i in range(len(phantom_points)):
                     # 90% chance to modify point to appear in vehicle's path
                     if np.random.random() < 0.90:
-                        # Adjust y coordinate to be VERY close to the center line
-                        phantom_points[i, 1] = phantom_points[i, 1] * 0.2 # Reduce lateral offset even more
+                        # Adjust y coordinate to be close to the center line
+                        phantom_points[i, 1] = phantom_points[i, 1] * 0.2 
                         
                         # Adjust height to be in detection range (0.3m to 2.0m)
                         phantom_points[i, 2] = np.random.uniform(0.3, 2.0)
                         
-                        # Adjust distance to be in critical detection range (15-40 meters)
-                        # This is a key range for emergency braking
+                        # Adjust distance to be in critical detection range (20-45 meters)
                         distance = np.sqrt(phantom_points[i, 0]**2 + phantom_points[i, 1]**2)
-                        if distance < 15 or distance > 40:
+                        if distance < 20 or distance > 45:
                             target_distance = np.random.uniform(20, 45)
                             scale_factor = target_distance / max(0.1, distance)
                             phantom_points[i, 0] *= scale_factor
                             phantom_points[i, 1] *= scale_factor
                 
-                # Create focused phantom clusters to ensure detection - but less often
+                # Create focused phantom clusters to ensure detection
                 current_time = time.time()
                 time_since_last_cluster = current_time - getattr(SensorCallbacks, 'last_focused_cluster_time', 0)
                 
@@ -226,7 +225,7 @@ class SensorCallbacks:
             else:
                 SensorCallbacks.time_offset = 0
             
-            # Occasionally increase interference (simulating passing reflective surfaces, etc)
+            # Occasionally increase interference
             time_factor = np.sin(SensorCallbacks.time_offset / 10.0) * config.interference_time_factor_amplitude
             
             # Ensure interference stays positive and doesn't exceed reasonable limits
@@ -246,7 +245,7 @@ class SensorCallbacks:
         # Current timestamp
         current_time = datetime.now()
         
-        # Calculate time since simulation started (in milliseconds) if sim_start_time is provided
+        # Calculate time since simulation started (in milliseconds)
         time_since_start_ms = None
         if sim_start_time is not None:
             time_since_start_ms = int((current_time - sim_start_time).total_seconds() * 1000)
@@ -331,9 +330,6 @@ class SensorCallbacks:
         
         # Store this reading for potential interference with front LiDAR
         SensorCallbacks.last_roof_lidar_data = data.copy() if len(data) > 0 else None
-        
-        # No interference applied to roof LiDAR - it remains clean
-        # This is intentional as we only want the roof sensor to affect the front sensor
                 
         # Print debug info about the point cloud periodically
         if len(lidar_data_list) % 20 == 0:
@@ -342,7 +338,7 @@ class SensorCallbacks:
         # Current timestamp
         current_time = datetime.now()
         
-        # Calculate time since simulation started (in milliseconds) if sim_start_time is provided
+        # Calculate time since simulation started (in milliseconds)
         time_since_start_ms = None
         if sim_start_time is not None:
             time_since_start_ms = int((current_time - sim_start_time).total_seconds() * 1000)
@@ -371,7 +367,7 @@ class SensorCallbacks:
         Returns:
             tuple: (callback_function, collision_detected_reference)
         """
-        collision_detected = [False]  # Use a list to allow mutation from within the closure
+        collision_detected = [False]
         
         def collision_callback(event):
             # Calculate collision impact force

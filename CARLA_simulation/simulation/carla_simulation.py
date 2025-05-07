@@ -23,14 +23,14 @@ class CarlaSimulation:
         self.sensor_callbacks = sensor_callbacks
         
         self.sim_dir = file_manager.create_simulation_directory()
-        self.front_lidar_data_list = []  # Changed from lidar_data_list to front_lidar_data_list
-        self.roof_lidar_data_list = []   # Added roof_lidar_data_list
+        self.front_lidar_data_list = []  
+        self.roof_lidar_data_list = []  
         self.collision_detected = False
         self.stopped_time = 0.0
         self.vehicle = None
         self.pedestrian = None
-        self.front_lidar = None          # Changed from lidar to front_lidar
-        self.roof_lidar = None           # Added roof_lidar
+        self.front_lidar = None
+        self.roof_lidar = None
         self.collision_sensor = None
         self.world = None
         self.client = None
@@ -178,10 +178,6 @@ class CarlaSimulation:
             
             # Ensure pedestrian has proper physics - critical for collision detection
             self.pedestrian.set_simulate_physics(True)
-            
-            # Make pedestrian more visible in LiDAR by changing its color
-            if hasattr(self.pedestrian, 'set_color'):
-                self.pedestrian.set_color(carla.Color(r=255, g=0, b=0))  # Bright red
                 
             # Set up proper collision detection for the pedestrian
             if hasattr(self.pedestrian, 'set_enable_gravity'):
@@ -372,54 +368,6 @@ class CarlaSimulation:
         
         return True
     
-    def visualize_detection(self, debug, recent_data, detection_results):
-        """Visualize LiDAR points and object detection in the simulation"""
-        car_pos = self.vehicle.get_location()
-        
-        # Visualize a smaller sample of LiDAR points to avoid performance issues
-        try:
-            # Only visualize every 10th point from the first 200 points to prevent renderer overload
-            for i in range(0, min(200, len(recent_data)), 10):
-                point = recent_data[i]
-                
-                # Convert from LiDAR-relative to world coordinates
-                point_loc = carla.Location(
-                    x=car_pos.x + point[0],
-                    y=car_pos.y + point[1],
-                    z=car_pos.z + point[2]
-                )
-                
-                # Draw a dot for each LiDAR point
-                debug.draw_point(
-                    point_loc,
-                    size=0.05,
-                    color=carla.Color(0, 255, 0, 255),  # Green dots for raw LiDAR
-                    life_time=0.1
-                )
-        except Exception as e:
-            print(f"Error drawing LiDAR points: {e}")
-        
-        # Check if object was detected
-        if detection_results.get('object_detected', False):
-            # Draw a line to the detected object
-            object_loc = detection_results['location']
-            
-            # Convert from LiDAR-relative to world coordinates
-            object_world_loc = carla.Location(
-                x=car_pos.x + object_loc[0],
-                y=car_pos.y + object_loc[1],
-                z=car_pos.z + object_loc[2]
-            )
-            
-            # Draw a more visible red line from car to detected object
-            debug.draw_line(
-                car_pos,
-                object_world_loc,
-                thickness=0.3,  # Thicker line
-                color=carla.Color(255, 0, 0, 255),
-                life_time=0.2
-            )
-    
     def run_simulation(self):
         """Run the main simulation loop"""
         if not self.initialize_simulation():
@@ -442,8 +390,6 @@ class CarlaSimulation:
         stop_control.hand_brake = True
         self.vehicle.apply_control(stop_control)
         
-        # Debug helper removed as visualization is not needed
-        
         # Main simulation loop
         start_time = datetime.now()
         
@@ -452,7 +398,7 @@ class CarlaSimulation:
                 current_time = datetime.now()
                 elapsed_seconds = (current_time - start_time).total_seconds()
                 
-                # Start vehicle movement after 1 second (reduced waiting time)
+                # Start vehicle movement after 1 second
                 if not self.movement_started and elapsed_seconds > 1.0:
                     print("Starting Movement...")
                     # Make sure autopilot is off
@@ -486,8 +432,6 @@ class CarlaSimulation:
                 
                 # This small sleep helps prevent simulation issues
                 time.sleep(0.005)
-                
-                # Visualization code removed as it's not needed at this time
                 
                 # Display distance between vehicle and pedestrian
                 if self.frame % 20 == 0:  # Update stats every 20 frames

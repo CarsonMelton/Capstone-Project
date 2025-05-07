@@ -104,7 +104,7 @@ class AutonomousController:
         if speed_ms < 0.1:
             return float('inf')
         
-        # More conservative TTC calculation that accounts for lateral offset
+        # conservative TTC calculation that accounts for lateral offset
         lateral_reduction_factor = max(0.5, min(1.0, (1.0 - lateral_offset/15.0)))
         effective_distance = distance * lateral_reduction_factor
         return effective_distance / speed_ms
@@ -118,7 +118,7 @@ class AutonomousController:
             'reason': ""
         }
         
-        # Special case for direct path objects - with more permissive threshold
+        # Special case for direct path objects
         if lateral_offset < 3 and distance < 60.0:
             intensity = max(0.6, min(1.0, (60.0 - distance) / 40.0 + 0.2))
             if intensity > current_intensity:
@@ -150,7 +150,7 @@ class AutonomousController:
             result['intensity'] = 0.90
             result['reason'] = f"BRAKING - Object ahead in {ttc:.1f}s"
         else:
-            # Light braking - still treat as emergency for consistent behavior
+            # Light braking 
             result['intensity'] = 0.80
             result['reason'] = f"PREEMPTIVE BRAKING - Object approaching in {ttc:.1f}s"
         
@@ -191,7 +191,7 @@ class AutonomousController:
     @staticmethod
     def _display_brake_warning(brake_reason, emergency_brake, vehicle):
         """Display warning message for braking"""
-        print(f"\033[93m{brake_reason}\033[0m")  # Yellow text
+        print(f"\033[93m{brake_reason}\033[0m")
         
         # Additional information for emergency situations
         if emergency_brake:
@@ -200,4 +200,4 @@ class AutonomousController:
             speed_ms = (vel.x**2 + vel.y**2 + vel.z**2)**0.5
             speed_mph = speed_ms * 2.23694  # Convert to mph
             
-            print(f"\033[91mAUTONOMOUS BRAKING ACTIVATED at {speed_mph:.1f} mph\033[0m")  # Red text
+            print(f"\033[91mAUTONOMOUS BRAKING ACTIVATED at {speed_mph:.1f} mph\033[0m")

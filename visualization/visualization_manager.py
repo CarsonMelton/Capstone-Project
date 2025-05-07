@@ -18,7 +18,7 @@ from .ui_callbacks import UICallbacks
 # Constants for visualization
 DEFAULT_FPS = 10
 DEFAULT_POINT_SIZE = 2.0
-DEFAULT_PHANTOM_THRESHOLD = 0.2  # Kept for backward compatibility but not used
+DEFAULT_PHANTOM_THRESHOLD = 0.2
 COLOR_BACKGROUND = [0.1, 0.1, 0.1]  # Dark gray
 COLOR_HIGHLIGHT = [0.0, 1.0, 0.4]  # Bright green
 
@@ -36,7 +36,6 @@ class LiDARVisualizer:
         self.fps = DEFAULT_FPS
         self.point_size = DEFAULT_POINT_SIZE
         self.loop = False
-        # We keep this as a class attribute for backwards compatibility, but it's not used
         self.phantom_threshold = DEFAULT_PHANTOM_THRESHOLD
         
         # State variables
@@ -123,7 +122,7 @@ class LiDARVisualizer:
             print(f"No valid points in frame {idx}")
             return False
         
-        # Identify phantom points (ONLY using tagged phantoms)
+        # Identify phantom points
         phantom_indices = self._identify_phantom_points(points_processed)
         
         # Load and map cluster indices

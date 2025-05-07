@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """
 File and Directory Management for CARLA Simulation
-================================================
 Utilities for managing simulation data directories and saving simulation results.
 """
 

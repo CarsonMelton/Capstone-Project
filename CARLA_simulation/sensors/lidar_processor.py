@@ -58,8 +58,8 @@ class LidarProcessor:
         min_distance = distances[min_distance_idx]
         closest_point = object_candidate_points[min_distance_idx]
         
-        # Minimum distance check - maintain original logic
-        if min_distance < 4.0:  # Minimum 3 meters for valid detection
+        # Minimum distance check
+        if min_distance < 4.0:  # Minimum 4 meters for valid detection
             vehicle_moving_time = getattr(LidarProcessor, 'vehicle_moving_time', 0)
             current_time = time.time()
             
@@ -69,15 +69,15 @@ class LidarProcessor:
             
             # If less than 5 seconds since startup, require more points for close object detection
             if current_time - LidarProcessor.startup_time < 3.0:
-                # Look for clusters of points (improved object detection)
+                # Look for clusters of points
                 cluster_radius = 0.5  # meters, reduced radius for more precision
                 distances_to_closest = np.sqrt(np.sum((object_candidate_points - closest_point)**2, axis=1))
                 cluster_mask = distances_to_closest < cluster_radius
                 cluster_points = object_candidate_points[cluster_mask]
                 cluster_indices = object_candidate_indices[cluster_mask]  # Track indices
                 
-                # Require more points (5) for early detections to filter out phantom points
-                if len(cluster_points) < 5:
+                # Require more points (3) for early detections to filter out phantom points
+                if len(cluster_points) < 3:
                     return {'object_detected': False, 'distance': float('inf')}
         
         # Check if point is within corridor

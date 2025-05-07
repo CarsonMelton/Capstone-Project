@@ -118,5 +118,3 @@ class UICallbacks:
         visualizer_instance.wait_time = 1.0 / visualizer_instance.fps
         print(f"Speed decreased. FPS: {visualizer_instance.fps:.1f}")
         return False
-    
-    # Removed threshold-related callbacks as they're no longer needed

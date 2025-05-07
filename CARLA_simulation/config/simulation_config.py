@@ -10,7 +10,7 @@ class SimulationConfig:
         self.no_rendering = False
         self.max_simulation_time = 120  # 2 minutes timeout
         
-        # Vehicle parameters - Adding these back
+        # Vehicle parameters
         self.vehicle_type = 'vehicle.dodge.charger'
         self.vehicle_mass = 1800.0  # kg
         self.vehicle_max_rpm = 5000.0
@@ -32,7 +32,7 @@ class SimulationConfig:
                 'name': 'roof_lidar',
                 'position': (0.0, 0.0, 2.0),  # x, y, z relative to vehicle
                 'rotation': (0.0, 0.0, 0.0),  # pitch, yaw, roll
-                'id_wavelength': 905,  # in nm - typical 905nm for standard LiDAR
+                'id_wavelength': 905,  # in nanometers
             },
             # Front bumper LiDAR
             {
@@ -46,15 +46,15 @@ class SimulationConfig:
         # Interference simulation - Master switches
         self.simulate_interference = True
         
-        # BALANCED PARAMETERS FOR MORE REALISTIC INTERFERENCE
+        # Balanced Parameters
         self.interference_base_level = 0.05  # Base percentage of interference applied
         self.interference_time_factor_amplitude = 0.02  # Controls the amplitude of time-varying oscillation
         
-        # Reduced rates for more occasional interference
+        # Rates reduced for more occasional interference
         self.interference_base_rate = 0.05  # Percentage of points to consider
         self.interference_probability_factor = 0.05  # Probability factor for actual injection
         
-        # Keep distortion parameters the same
+        # Distortion Parameters
         self.interference_distortion_base = 0.2
         self.interference_distortion_range = 0.6
         
@@ -72,7 +72,7 @@ class SimulationConfig:
        
         # Original position reference points
         self.original_x = 3.047784
-        self.original_y = 130.210068 + 1.524
+        self.original_y = 131.734068
 
         # Scene setup parameters (in meters, converted from feet)
         self.feet_to_meters = 0.3048
